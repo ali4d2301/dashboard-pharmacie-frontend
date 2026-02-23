@@ -36,12 +36,22 @@
         <div class="row">
           <div class="field">
             <label>Classe thérapeutique</label>
-            <input v-model.trim="form.classe" placeholder="Ex: Anatalgique, antibiotique ou antipaludique" />
+            <select v-model="form.classe" :class="{ 'is-placeholder': !form.classe }" required>
+              <option disabled value="">Choisir…</option>
+              <option v-for="item in therapeuticClassOptions" :key="item" :value="item">
+                {{ item }}
+              </option>
+            </select>
           </div>
 
           <div class="field">
             <label>Cible prioritaire</label>
-            <input v-model.trim="form.cible" placeholder="Ex: Appareil digestif ou système nerveux"/>
+            <select v-model="form.cible" :class="{ 'is-placeholder': !form.cible }" required>
+              <option disabled value="">Choisir…</option>
+              <option v-for="item in priorityTargetOptions" :key="item" :value="item">
+                {{ item }}
+              </option>
+            </select>
           </div>
         </div>
 
@@ -53,14 +63,14 @@
 
           <div class="field">
             <label>Stock actuel</label>
-            <input v-model.number="form.stock" type="number" min="0" step="1"/>
+            <input v-model.number="form.stock" type="number" min="0" step="1" required/>
           </div>
         </div>
 
         <div class="row">
           <div class="field">
             <label>Prix d'achat du produit (FCFA)</label>
-            <input v-model.number="form.achat" type="number" min="0" step="5" placeholder="Ex: 1450" />
+            <input v-model.number="form.achat" type="number" min="0" step="5" placeholder="Ex: 1450" required />
           </div>
 
           <div class="field">
@@ -72,7 +82,7 @@
         <div class="row">
           <div class="field">
             <label>Statut</label>
-            <select v-model="form.statut" required>
+            <select v-model="form.statut" :class="{ 'is-placeholder': !form.statut }" required>
               <option disabled value="">Choisir…</option>
               <option value="Actif">Actif</option>
               <option value="Inactif">Inactif</option>
@@ -85,20 +95,10 @@
           </div>
         </div>
 
-        <div class="row">
-          <div class="field full">
-            <label>Commentaire</label>
-            <textarea v-model.trim="form.commentaire" rows="4" placeholder="Optionnel…"></textarea>
-          </div>
-        </div>
-
         <div class="actions">
-          <button class="btn" type="button" @click="reset">Réinitialiser</button>
           <button class="btn primary" type="submit">Enregistrer</button>
         </div>
-
-        <!-- Aperçu en bas (pratique pour comprendre) -->
-        <pre class="preview">{{ form }}</pre>
+        
       </form>
     </div>
   </div>
@@ -114,6 +114,38 @@ defineProps({
 
 const router = useRouter()
 
+function getTodayDate() {
+  const today = new Date()
+  const offsetMs = today.getTimezoneOffset() * 60000
+  return new Date(today.getTime() - offsetMs).toISOString().slice(0, 10)
+}
+
+const therapeuticClassOptions = [
+  "Antalgique",
+  "Antibiotique",
+  "Antipaludique",
+  "Anti-inflammatoire",
+  "Antihypertenseur",
+  "Antidiabétique",
+  "Antihistaminique",
+  "Antifongique",
+  "Vitamines et compléments",
+  "Autres"
+]
+
+const priorityTargetOptions = [
+  "Appareil digestif",
+  "Système nerveux",
+  "Système respiratoire",
+  "Système cardiovasculaire",
+  "Système endocrinien",
+  "Système musculo-squelettique",
+  "Peau et muqueuses",
+  "Santé de la femme",
+  "Pédiatrie",
+  "Autres"
+]
+
 const form = reactive({
   code: "",
   nom: "",
@@ -126,7 +158,7 @@ const form = reactive({
   achat: 0,
   vente: 0,
   statut:"",
-  date_enregistrement:"",
+  date_enregistrement: getTodayDate(),
   commentaire: "",
 })
 
@@ -142,17 +174,19 @@ async function submit() {
       classe: form.classe || null,
       cible: form.cible || null,
       unite: form.unite || null,
-      stock_actuel: form.stock || null,
+      stock_actuel: form.stock ?? null,
       prix_achat: form.achat ?? null,
       prix_vente: form.vente ?? null,
       date_creation: form.date_enregistrement || null, // "YYYY-MM-DD"
       statut: form.statut || "Actif",
-      // commentaire: form.commentaire  // ⚠️ ta table ne l'a pas (voir note)
     };
 
-    await axios.post("http://localhost:8000/api/products/insert_prod", payload);
+    const confirmed = window.confirm("Voulez-vous vraiment enregistrer ce produit ?");
+    if (!confirmed) return;
 
-    alert("✅ Enregistré dans MySQL !");
+    await axios.post(`${import.meta.env.VITE_API_BASE}/api/products/insert_prod`, payload);
+
+    alert("✅ Enregistré dans la base de données !");
     reset();
   } catch (e) {
     alert(e?.response?.data?.detail || "❌ Erreur lors de l'enregistrement.");
@@ -173,7 +207,7 @@ function reset() {
   form.achat =  0,
   form.vente =  0,
   form.statut = "",
-  form.date_enregistrement = "",
+  form.date_enregistrement = getTodayDate(),
   form.commentaire = ""
 }
 </script>   
@@ -196,7 +230,6 @@ h1 {
 .form { margin-top: 14px; display: grid; gap: 14px; }
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .field { display: grid; gap: 6px; }
-.field.full { grid-column: 1 / -1; }
 
 label { font-weight: 700; color: #333; }
 
@@ -205,7 +238,19 @@ input, select, textarea {
   border-radius: 10px;
   padding: 10px 12px;
   font-size: 16px;
+  color: #c00000;
+  font-weight: 700;
   outline: none;
+}
+input::placeholder,
+textarea::placeholder {
+  color: #666;
+  font-weight: 400;
+  opacity: 1;
+}
+select.is-placeholder {
+  color: #666;
+  font-weight: 400;
 }
 input:focus, select:focus, textarea:focus { border-color: #e46f36; }
 

@@ -1,24 +1,40 @@
 <template>
-  <div class="page">
+  <div ref="historyShell" class="page">
 
     <div class="header">
 
       <!-- Filtres: Grid = zéro chevauchement + mêmes hauteurs -->
       <div class="filters">
+        <button class="btn fs-btn" type="button" @click="toggleFullscreen">
+          <span v-if="isFullscreen">Quitter<br />plein écran</span>
+          <span v-else>Plein<br />écran</span>
+        </button>
 
         <div class="period">
           <div class="field">
             <label>Du</label>
-            <input class="control control--sm" type="date" v-model="dateFrom" />
+            <input
+              class="control control--sm"
+              type="date"
+              v-model="dateFrom"
+              :max="dateTo || null"
+              @change="normalizeDateRange('from')"
+            />
           </div>
 
           <div class="field">
             <label>Au</label>
-            <input class="control control--sm" type="date" v-model="dateTo" />
+            <input
+              class="control control--sm"
+              type="date"
+              v-model="dateTo"
+              :min="dateFrom || null"
+              @change="normalizeDateRange('to')"
+            />
           </div>
         </div>
 
-        <div class="field">
+        <div class="field field--classe">
           <label>Classe</label>
           <select class="control" v-model="classe">
             <option value="ALL">Tout</option>
@@ -26,7 +42,7 @@
           </select>
         </div>
 
-        <div class="field">
+        <div class="field field--cible">
           <label>Cible</label>
           <select class="control" v-model="cible">
             <option value="ALL">Tout</option>
@@ -60,24 +76,37 @@
         <thead>
           <tr>
             <th
-              v-for="col in cols"
+              v-for="(col, colIndex) in cols"
               :key="col.key"
-              class="th sortable"
-              :style="{ width: col.width }"
+              :class="[
+                'th',
+                'sortable',
+                { 'sticky-col': colIndex < 2, 'sticky-col-1': colIndex === 0, 'sticky-col-2': colIndex === 1 }
+              ]"
+              :style="getHeaderCellStyle(col, colIndex)"
               @click="toggleSort(col.key)"
             >
-              <span>{{ col.label }}</span>
-              <span class="sort" v-if="sortBy === col.key">
-                {{ sortDir === "asc" ? "▲" : "▼" }}
-              </span>
+              <div class="th-inner">
+                <span>{{ col.label }}</span>
+                <span class="sort" v-if="sortBy === col.key">
+                  {{ sortDir === "asc" ? "▲" : "▼" }}
+                </span>
+              </div>
+              <span
+                class="col-resizer"
+                role="separator"
+                aria-hidden="true"
+                @pointerdown.stop.prevent="startColResize($event, colIndex)"
+                @click.stop
+              ></span>
             </th>
           </tr>
         </thead>
 
         <tbody>
           <tr v-for="(r, idx) in rows" :key="idx">
-            <td>{{ fmtDateISOToFR(r.date_mvt) }}</td>
-            <td class="strong">{{ r.nom_produit }}</td>
+            <td class="sticky-col sticky-col-1">{{ fmtDateISOToFR(r.date_mvt) }}</td>
+            <td class="strong sticky-col sticky-col-2" :style="getBodyCellStyle(1)">{{ r.nom_produit }}</td>
             <td>{{ r.forme || "" }}</td>
             <td>{{ r.dosage || "" }}</td>
             <td>{{ r.classe || "" }}</td>
@@ -102,8 +131,9 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue"
+import { ref, computed, onBeforeUnmount, onMounted } from "vue"
 import * as XLSX from "xlsx"
+import api from "@/services/api";
 
 const rows = ref([])
 const loading = ref(false)
@@ -121,6 +151,9 @@ const cibles = ref([])
 
 const sortBy = ref("date_mvt")
 const sortDir = ref("desc")
+const historyShell = ref(null)
+const isFullscreen = ref(false)
+let colResizeState = null
 
 function toISODate(d) {
   const yyyy = d.getFullYear()
@@ -137,6 +170,19 @@ function setDefault90Days() {
   dateFrom.value = toISODate(start)
 }
 
+function normalizeDateRange(changedSide) {
+  if (!dateFrom.value || !dateTo.value) return
+  if (dateFrom.value <= dateTo.value) return
+
+  if (changedSide === "from") {
+    dateTo.value = dateFrom.value
+    return
+  }
+  if (changedSide === "to") {
+    dateFrom.value = dateTo.value
+  }
+}
+
 function fmtDateISOToFR(iso) {
   if (!iso) return ""
   const s = String(iso).slice(0, 10)
@@ -150,6 +196,30 @@ function fmtInt(v) {
   const n = Number(v)
   if (Number.isNaN(n)) return String(v)
   return n.toLocaleString("fr-FR")
+}
+
+function handleFullscreenChange() {
+  isFullscreen.value = document.fullscreenElement === historyShell.value
+}
+
+async function toggleFullscreen() {
+  const el = historyShell.value
+  if (!el || !document?.fullscreenEnabled) return
+
+  try {
+    if (document.fullscreenElement === el) {
+      await document.exitFullscreen()
+      return
+    }
+
+    if (document.fullscreenElement) {
+      await document.exitFullscreen()
+    }
+
+    await el.requestFullscreen()
+  } catch {
+    // no-op
+  }
 }
 
 /*-> Dès que ces refs changent, ce computed change aussi.
@@ -177,39 +247,44 @@ function useAutoRemoteMovements({ keyRef, paramsRef }) {
   let debounceTimer = null
   let abortCtrl = null
   let lastKey = ""
-
+  
   async function fetchRows() {
     // Annule l'appel précédent si l'utilisateur change vite les filtres
-    if (abortCtrl) abortCtrl.abort()
-    abortCtrl = new AbortController()
+    if (abortCtrl) abortCtrl.abort();
+    abortCtrl = new AbortController();
 
-    loading.value = true
+    loading.value = true;
+
     try {
       // --- mouvements ---
-      const u = new URL(import.meta.env.VITE_API_BASE + "/api/dashboard/movements")
-      Object.entries(paramsRef.value).forEach(([k, v]) => {
-        if (v === null || v === undefined) return
-        if (typeof v === "string" && v.trim() === "") return
-        u.searchParams.set(k, v)
-      })
+      const res = await api.get("/api/dashboard/movements", {
+        params: paramsRef.value,
+        signal: abortCtrl.signal,
+      });
 
-      const res = await fetch(u.toString(), { signal: abortCtrl.signal })
-      const data = await res.json()
-      rows.value = data.items || []
+      rows.value = res.data.items || [];
 
       // --- filtres (dépendent surtout de la période) ---
-      const uf = new URL(import.meta.env.VITE_API_BASE + "/api/dashboard/movements/filters")
-      uf.searchParams.set("date_from", paramsRef.value.date_from || "")
-      uf.searchParams.set("date_to", paramsRef.value.date_to || "")
+      const resF = await api.get("/api/dashboard/movements/filters", {
+        params: {
+          date_from: paramsRef.value.date_from || "",
+          date_to: paramsRef.value.date_to || "",
+        },
+        signal: abortCtrl.signal,
+      });
 
-      const resF = await fetch(uf.toString(), { signal: abortCtrl.signal })
-      const dataF = await resF.json()
-      classes.value = dataF.classes || []
-      cibles.value = dataF.cibles || []
+      classes.value = resF.data.classes || [];
+      cibles.value = resF.data.cibles || [];
+
+    } catch (err) {
+      if (err.name !== "CanceledError") {
+        console.error("Erreur chargement dashboard:", err);
+      }
     } finally {
-      loading.value = false
+      loading.value = false;
     }
   }
+
 
   // IMPORTANT :
   // - Aucun watch dans le composant
@@ -237,9 +312,16 @@ function useAutoRemoteMovements({ keyRef, paramsRef }) {
 const remote = useAutoRemoteMovements({ keyRef: queryKey, paramsRef: queryParams })
 
 onMounted(async () => {
+  document.addEventListener("fullscreenchange", handleFullscreenChange)
+  handleFullscreenChange()
   setDefault90Days()
   remote.startAuto()   // <- auto-reload “comme ProductCatalogTable”
   await remote.fetchRows() // premier chargement immédiat
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener("fullscreenchange", handleFullscreenChange)
+  stopColResize()
 })
 
 /* =========================
@@ -254,6 +336,68 @@ function toggleSort(key) {
     sortDir.value = "asc"
   }
   // pas de reload() ici : queryKey change => auto
+}
+
+function startColResize(event, colIndex) {
+  const col = cols.value[colIndex]
+  if (!col) return
+
+  colResizeState = {
+    colIndex,
+    startX: event.clientX,
+    startWidth: col.width,
+  }
+
+  window.addEventListener("pointermove", onColResizeMove)
+  window.addEventListener("pointerup", stopColResize)
+  window.addEventListener("pointercancel", stopColResize)
+  document.body.style.userSelect = "none"
+  document.body.style.cursor = "col-resize"
+}
+
+function onColResizeMove(event) {
+  if (!colResizeState) return
+
+  const col = cols.value[colResizeState.colIndex]
+  if (!col) return
+
+  const deltaX = event.clientX - colResizeState.startX
+  const minWidth = col.minWidth ?? 80
+  col.width = Math.max(minWidth, colResizeState.startWidth + deltaX)
+}
+
+function stopColResize() {
+  if (!colResizeState) return
+
+  colResizeState = null
+  window.removeEventListener("pointermove", onColResizeMove)
+  window.removeEventListener("pointerup", stopColResize)
+  window.removeEventListener("pointercancel", stopColResize)
+  document.body.style.userSelect = ""
+  document.body.style.cursor = ""
+}
+
+function getStickyLeft(colIndex) {
+  let left = 0
+  for (let i = 0; i < colIndex; i++) {
+    left += Number(cols.value[i]?.width || 0)
+  }
+  return left
+}
+
+function getHeaderCellStyle(col, colIndex) {
+  const style = {
+    width: `${col.width}px`,
+    minWidth: `${col.width}px`,
+  }
+  if (colIndex < 2) {
+    style.left = `${getStickyLeft(colIndex)}px`
+  }
+  return style
+}
+
+function getBodyCellStyle(colIndex) {
+  return { left: `${getStickyLeft(colIndex)}px` }
 }
 
 function exportExcel() {
@@ -281,22 +425,22 @@ function exportExcel() {
 }
 
 /* Expose au template (si besoin) */
-const cols = [
-  { key: "date_mvt", label: "Date", width: "110px" },
-  { key: "nom_produit", label: "Produit", width: "240px" },
-  { key: "forme", label: "Forme", width: "160px" },
-  { key: "dosage", label: "Dosage", width: "120px" },
-  { key: "classe", label: "Classe", width: "200px" },
-  { key: "cible", label: "Cible", width: "200px" },
-  { key: "unite", label: "Unité", width: "90px" },
-  { key: "prix_achat", label: "Prix achat", width: "110px" },
-  { key: "prix_vente", label: "Prix vente", width: "110px" },
-  { key: "type_mouvement", label: "Type", width: "90px" },
-  { key: "mouvement", label: "Mouvement", width: "130px" },
-  { key: "quantite", label: "Qté", width: "80px" },
-  { key: "stock_apres", label: "Stock après", width: "120px" },
-  { key: "commentaire", label: "Commentaire", width: "260px" },
-]
+const cols = ref([
+  { key: "date_mvt", label: "Date", width: 100, minWidth: 80 },
+  { key: "nom_produit", label: "Produit", width: 180, minWidth: 120 },
+  { key: "forme", label: "Forme", width: 100, minWidth: 80 },
+  { key: "dosage", label: "Dosage", width: 112, minWidth: 86 },
+  { key: "classe", label: "Classe", width: 188, minWidth: 145 },
+  { key: "cible", label: "Cible", width: 188, minWidth: 145 },
+  { key: "unite", label: "Unité", width: 84, minWidth: 74 },
+  { key: "prix_achat", label: "Prix achat", width: 102, minWidth: 90 },
+  { key: "prix_vente", label: "Prix vente", width: 102, minWidth: 90 },
+  { key: "type_mouvement", label: "Type", width: 80, minWidth: 70 },
+  { key: "mouvement", label: "Mouvement", width: 122, minWidth: 104 },
+  { key: "quantite", label: "Qté", width: 74, minWidth: 66 },
+  { key: "stock_apres", label: "Stock après", width: 112, minWidth: 92 },
+  { key: "commentaire", label: "Commentaire", width: 240, minWidth: 165 },
+])
 
 </script>
 
@@ -316,13 +460,15 @@ const cols = [
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  margin: 0 0 12px;
+  margin: 0 0 6px;
 }
 
 .period{
   display: flex;
   gap: 10px;
   align-items: flex-end;
+  flex: 0 0 288px;
+  min-width: 0;
 }
 
 /* Badge 5000 lignes à droite */
@@ -330,24 +476,24 @@ const cols = [
   height: 34px;
   display: inline-flex;
   align-items: center;
-  padding: 0 12px;
+  padding: 0 8px;
   border-radius: 999px;
   border: 1px solid rgba(0,0,0,0.12);
   background: #fff;
-  font-size: 13px;
+  font-size: 11px;
   white-space: nowrap;
 }
 
 /* Champs: harmonisation (même police/hauteur) */
-.field{ display: grid; gap: 6px; }
+.field{ display: grid; gap: 6px; min-width: 0; }
 
-label{
+.filters .field label{
   font-size: 13px;
   opacity: 0.75;
   line-height: 1;
 }
 
-.control{
+.filters .control{
   height: 46px;                 /* hauteur identique partout */
   padding: 0 14px;
   border-radius: 14px;
@@ -359,7 +505,7 @@ label{
 }
 
 /* Dates plus petites mais mêmes styles (harmonisation demandée) */
-.control--sm{
+.filters .control--sm{
   height: 45px;                 /* <- dates plus basses */
   font-size: 14px;
 }
@@ -381,20 +527,39 @@ label{
   font-weight: 700;
 }
 
-/* Largeur date fixe = pas de chevauchement */
-.period .control{
+/* Dates lisibles */
+.period .field{
+  flex: 1 1 0;
   min-width: 0;
-  max-width: 130px;
 }
 
-/* Filtres: grid => zéro chevauchement garanti */
+.period .control{
+  width: 100%;
+  min-width: 0;
+  flex: 0 0 auto;
+  max-width: none;
+}
+
+/* Filtres: flex maitrisé pour garder tous les éléments visibles */
 .filters{
-  display: grid;
-  grid-template-columns: auto auto auto 1fr auto auto;
-  gap: 8px;
+  display: flex;
+  width: 100%;
+  gap: 6px;
   align-items: end;
   margin: 0;
   flex: 0 0 auto;
+}
+
+.filters > *{
+  min-width: 0;
+}
+
+.field--classe{
+  flex: 0 0 168px;
+}
+
+.field--cible{
+  flex: 0 0 156px;
 }
 
 /* Table: doit prendre tout l'espace restant */
@@ -403,38 +568,75 @@ label{
   min-height: 0;      /* <-- indispensable pour que le scroll marche en flex */
   overflow: auto;     /* <-- scroll interne */
 
-  border-radius: 16px;
+  border-radius: 5px;
   border: 1px solid rgba(0,0,0,0.10);
   background: #fff;
 }
 
 .field--product{
+  flex: 0 1 220px;
   min-width: 0;
 }
 
-.btn{
-  height: 46px;
+.filters .btn{
+  height: 44px;
   min-width: 0px;
-  padding: 0 10px;
+  padding: 0 8px;
   border-radius: 14px;
   border: 1px solid rgba(0,0,0,0.14);
   background: #fff;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
   text-align: center;
-  font-weight: 700;
+  font-weight: 600;
   white-space: nowrap;
 }
 
-.btn.primary{
+.filters .btn.fs-btn{
+  width: 80px;
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 500;
+  white-space: normal;
+  line-height: 1.05;
+  text-align: center;
+}
+
+.filters .btn.fs-btn:hover{
+  border-color: #1d4ed8;
+  background: #dbeafe;
+  box-shadow: 0 3px 10px rgba(29, 78, 216, 0.18);
+}
+
+.filters .btn.fs-btn:focus-visible{
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.25);
+}
+
+.filters .btn.primary{
+  width: 90px;
+  padding: 0 6px;
+  font-size: 11px;
   background: #0b1220;
   color: #fff;
   border-color: #0b1220;
 }
 
+.page:fullscreen{
+  padding-top: 22px;
+  background: #f8fafc;
+}
+
+.pill{
+  margin-left: auto;
+  justify-self: auto;
+}
+
 
 .tbl{
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
+  table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
   font-size: 15px;
@@ -447,14 +649,83 @@ label{
   z-index: 2;
   background: #0b1220;
   color: #fff;
-  padding: 12px 12px;
+  padding: 12px 16px 12px 12px;
   text-align: left;
   white-space: nowrap;
   border-bottom: 1px solid rgba(255,255,255,0.08);
 }
 
+.th-inner{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.col-resizer{
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 10px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.col-resizer::after{
+  content: "";
+  position: absolute;
+  top: 25%;
+  bottom: 25%;
+  right: 3px;
+  width: 2px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.32);
+  opacity: 0;
+  transition: opacity 0.14s ease;
+}
+
+.th:hover .col-resizer::after{
+  opacity: 1;
+}
+
 .th:first-child{ border-top-left-radius: 14px; }
 .th:last-child{ border-top-right-radius: 14px; }
+
+/* Colonnes figées (Date + Produit) */
+.th.sticky-col,
+tbody td.sticky-col{
+  position: sticky;
+  background-clip: padding-box;
+}
+
+.th.sticky-col{
+  z-index: 4;
+}
+
+.th.sticky-col-1{
+  left: 0;
+  z-index: 5;
+}
+
+.th.sticky-col-2{
+  z-index: 5;
+  box-shadow: 8px 0 10px -10px rgba(11, 18, 32, 0.45);
+}
+
+tbody td.sticky-col{
+  background: #fff;
+  z-index: 3;
+}
+
+tbody td.sticky-col-1{
+  left: 0;
+  z-index: 4;
+}
+
+tbody td.sticky-col-2{
+  z-index: 4;
+  box-shadow: 8px 0 10px -10px rgba(11, 18, 32, 0.2);
+}
 
 tbody td{
   padding: 12px 12px;
@@ -462,12 +733,16 @@ tbody td{
   vertical-align: top;
 }
 
-tbody tr:hover{
-  background: rgba(15, 23, 42, 0.04);
+tbody tr:hover td{
+  background: #f6f8fb;
+}
+
+tbody tr:hover td.sticky-col{
+  background: #f6f8fb;
 }
 
 .sortable{ cursor: pointer; user-select: none; }
-.sort{ margin-left: 8px; font-size: 12px; opacity: 0.9; }
+.sort{ margin-left: 0; font-size: 12px; opacity: 0.9; }
 
 .num{ text-align: right; white-space: nowrap; }
 .strong{ font-weight: 900; }
@@ -496,12 +771,36 @@ tbody tr:hover{
   }
 
   .filters{
-    grid-template-columns: 1fr 1fr;
-    grid-auto-rows: auto;
+    flex-wrap: wrap;
   }
 
-  .btn{
+  .period,
+  .field--classe,
+  .field--cible,
+  .field--product{
+    flex: 1 1 260px;
+  }
+
+  .filters .btn{
+    width: auto;
+  }
+
+  .filters .btn.fs-btn,
+  .filters .btn.primary{
+    width: 160px;
+  }
+
+  .period{
+    flex-wrap: nowrap;
+  }
+
+  .period .control{
     width: 100%;
+    max-width: none;
+  }
+
+  .pill{
+    margin-left: 0;
   }
 }
 
@@ -517,18 +816,20 @@ tbody tr:hover{
     justify-content: flex-start;
   }
 
-  .period{
-    width: 100%;
-    flex-wrap: wrap;
-  }
-
-  .period .control{
-    width: 100%;
-    min-width: 0;
-  }
-
   .filters{
-    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .period,
+  .field--classe,
+  .field--cible,
+  .field--product,
+  .filters .btn,
+  .filters .btn.fs-btn,
+  .filters .btn.primary{
+    width: 100%;
+    flex: 0 0 auto;
   }
 }
 </style>

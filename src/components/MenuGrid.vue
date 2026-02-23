@@ -2,7 +2,7 @@
   <main class="container">
     <div class="grid">
       <button
-        v-for="item in items"
+        v-for="item in visibleItems"
         :key="item.path"
         class="btn"
         :class="{ wide: item.wide }"
@@ -16,9 +16,21 @@
 </template>
 
 <script setup>
+import { computed } from "vue"
 import { useRouter } from "vue-router"
 
 const router = useRouter()
+const userRole = window.localStorage.getItem("pharmacie_user_role") || ""
+
+const READ_ROLES = ["admin", "viewer"]
+const ADMIN_ROLES = ["admin"]
+const PATH_ROLES = {
+  "/enregistrer-medicament": ADMIN_ROLES,
+  "/enregistrer-mouvement": ADMIN_ROLES,
+  "/editer-medicament": ADMIN_ROLES,
+  "/historique": READ_ROLES,
+  "/synthese": READ_ROLES,
+}
 
 const items = [
   { label: "Enregistrer un médicament", path: "/enregistrer-medicament", icon: "💊" },
@@ -30,6 +42,9 @@ const items = [
 
   { label: "Tableau de bord", path: "/synthese", icon: "📊", wide: true },
 ]
+const visibleItems = computed(() =>
+  items.filter((item) => (PATH_ROLES[item.path] || READ_ROLES).includes(userRole))
+)
 </script>
 
 <style scoped>

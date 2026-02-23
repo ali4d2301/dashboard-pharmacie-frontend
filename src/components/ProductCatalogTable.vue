@@ -1,9 +1,13 @@
 <template>
-  <div class="page">
+  <div ref="catalogShell" class="page">
     <div class="topbar">
       <h2 class="title">Catalogue Produits</h2>
 
       <div class="filters">
+        <button type="button" class="fsBtn" @click="toggleFullscreen">
+          {{ isFullscreen ? "Quitter plein écran" : "Plein écran" }}
+        </button>
+
         <input
           v-model="q"
           class="inp"
@@ -84,7 +88,7 @@
 
 <script setup>
 import axios from "axios";
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 
 const API = import.meta.env.VITE_API_BASE ;
 const ENDPOINT = `${API}/api/dashboard/list_products`;
@@ -131,6 +135,8 @@ const filteredRows = computed(() => {
 // ---- TRI (state)
 const sortBy = ref("");      // colonne triée
 const sortDir = ref("asc");  // "asc" | "desc"
+const catalogShell = ref(null);
+const isFullscreen = ref(false);
 
 // Colonnes numériques (pour trier correctement)
 const NUM_COLS = new Set(["prix_achat", "prix_vente", "stock_actuel"]);
@@ -267,13 +273,45 @@ function cellClass(col, val) {
   };
 }
 
+function handleFullscreenChange() {
+  isFullscreen.value = document.fullscreenElement === catalogShell.value;
+}
+
+async function toggleFullscreen() {
+  const el = catalogShell.value;
+  if (!el || !document?.fullscreenEnabled) return;
+
+  try {
+    if (document.fullscreenElement === el) {
+      await document.exitFullscreen();
+      return;
+    }
+
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+    }
+
+    await el.requestFullscreen();
+  } catch {
+    // no-op
+  }
+}
+
 async function load() {
   const { data } = await axios.get(ENDPOINT);
   columns.value = data.columns || [];
   rows.value = data.rows || [];
 }
 
-onMounted(load);
+onMounted(async () => {
+  document.addEventListener("fullscreenchange", handleFullscreenChange);
+  handleFullscreenChange();
+  await load();
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener("fullscreenchange", handleFullscreenChange);
+});
 </script>
 
 <style scoped>
@@ -330,9 +368,34 @@ onMounted(load);
 /* Filtres (responsive) */
 .filters {
   display: grid;
-  grid-template-columns: 1fr 220px 180px auto;
+  grid-template-columns: auto 1fr 220px 180px auto;
   gap: 12px;
   align-items: center;
+}
+
+.fsBtn {
+  height: 44px;
+  width: 178px;
+  padding: 0 14px;
+  border: 1px solid #2563eb;
+  border-radius: 16px;
+  outline: none;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.fsBtn:hover {
+  border-color: #1d4ed8;
+  background: #dbeafe;
+  box-shadow: 0 3px 10px rgba(29, 78, 216, 0.18);
+}
+
+.fsBtn:focus-visible {
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.25);
 }
 
 .inp,
@@ -609,6 +672,15 @@ onMounted(load);
   .tbl {
     min-width: 900px; /* un peu moins large sur mobile */
   }
+}
+
+.page:fullscreen {
+  padding-top: 22px;
+  background: #f8fafc;
+}
+
+.page:fullscreen .title {
+  top: 0;
 }
 
 </style>

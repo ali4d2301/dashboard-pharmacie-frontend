@@ -1,15 +1,23 @@
-import axios from "axios";
+//import axios from "axios";
+import api from "@/services/api";
 import { ref, watch, onMounted } from "vue";
 
 export function useDashboardLogic() {
-  const API = import.meta.env.VITE_API_BASE;
+  const TAB_STORAGE_KEY = "dashboard_active_tab";
+  const VALID_TABS = ["synthese", "liste", "mvts"];
 
-  const activeTab = ref("synthese");
+  function getInitialTab() {
+    if (typeof window === "undefined") return "synthese";
+    const saved = window.localStorage.getItem(TAB_STORAGE_KEY);
+    return VALID_TABS.includes(saved) ? saved : "synthese";
+  }
+
+  const activeTab = ref(getInitialTab());
 
   const now = new Date();
 
   // on recule d’un mois
-  now.setMonth(now.getMonth() - 1)
+  now.setMonth(now.getMonth() - 2) // Ici on recule de 2 mois pour être sûr d’avoir des données (si on est début janvier, les données de décembre ne sont peut-être pas encore là)
   const periodMonth = ref(now.getMonth() + 1);
   const periodYear = ref(now.getFullYear()); //Changement d’année géré tout seul
 
@@ -33,6 +41,7 @@ export function useDashboardLogic() {
 
   // ✅ Donut : états de stock
   const etatStockShare = ref([]); // [{name, value}]
+  const syntheseLoaded = ref(false);
 
   function reset() {
     periodMonth.value = now.getMonth() + 1;
@@ -44,14 +53,15 @@ export function useDashboardLogic() {
     new Intl.NumberFormat("fr-FR").format(Number(n || 0)) + " F CFA";
 
   async function fetchClasses() {
-    const { data } = await axios.get(`${API}/api/dashboard/classes`);
+    //const { data } = await axios.get(`${API}/api/dashboard/classes`);
+    const { data } = await api.get("/api/dashboard/classes");
     theraClasses.value = data.classes || [];
   }
 
   async function fetchKpis() {
     if (activeTab.value !== "synthese") return;
 
-    const { data } = await axios.get(`${API}/api/dashboard/kpis`, {
+    const { data } = await api.get("/api/dashboard/kpis", {
       params: {
         annee: periodYear.value,
         mois: periodMonth.value,
@@ -67,7 +77,7 @@ export function useDashboardLogic() {
   async function fetchEtatStockShare() {
     if (activeTab.value !== "synthese") return;
 
-    const { data } = await axios.get(`${API}/api/dashboard/etat_stock_share`, {
+    const { data } = await api.get("/api/dashboard/etat_stock_share", {
       params: {
         annee: periodYear.value,
         mois: periodMonth.value,
@@ -84,7 +94,7 @@ export function useDashboardLogic() {
   async function fetchMovementHist() {
     if (activeTab.value !== "synthese") return;
 
-    const { data } = await axios.get(`${API}/api/dashboard/movement_hist`, {
+    const { data } = await api.get("/api/dashboard/movement_hist", {
       params: {
         annee: periodYear.value,
         mois: periodMonth.value,
@@ -104,7 +114,7 @@ export function useDashboardLogic() {
 
     monthlyTableLoading.value = true;
     try {
-      const { data } = await axios.get(`${API}/api/dashboard/tableau_mensuel`, {
+      const { data } = await api.get("/api/dashboard/tableau_mensuel", {
         params: {
           annee: periodYear.value,
           mois: periodMonth.value,
@@ -117,14 +127,31 @@ export function useDashboardLogic() {
     }
   }
 
-  
-
-  watch([periodYear, periodMonth, theraClass, activeTab], async () => {
+  async function fetchSyntheseBundle() {
+    if (activeTab.value !== "synthese") return;
     await fetchKpis();
     await fetchEtatStockShare();
     await fetchMovementHist();
-    await fetchMonthlyTable(); 
+    await fetchMonthlyTable();
+    syntheseLoaded.value = true;
+  }
+
+  watch([periodYear, periodMonth, theraClass], async () => {
+    syntheseLoaded.value = false;
+    await fetchSyntheseBundle();
   }, { immediate: true });
+
+  watch(activeTab, async (tab) => {
+    if (tab !== "synthese") return;
+    if (syntheseLoaded.value) return;
+    await fetchSyntheseBundle();
+  });
+
+  watch(activeTab, (tab) => {
+    if (typeof window === "undefined") return;
+    if (!VALID_TABS.includes(tab)) return;
+    window.localStorage.setItem(TAB_STORAGE_KEY, tab);
+  });
 
   onMounted(async () => {
     await fetchClasses();

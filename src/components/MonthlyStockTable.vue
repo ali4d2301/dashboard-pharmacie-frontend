@@ -1,18 +1,28 @@
 <template>
-  <div>
+  <div ref="tableShell" class="table-shell" :class="{ 'is-fullscreen': isFullscreen }">
     <!-- Titre seul -->
     <div class="table-title">
       <h2>Synthèse par produit</h2>
     </div> 
     <!-- Ligne filtres -->
     <div class="table-head">
-      <input
-        class="table-search"
-        type="search"
-        v-model="q"
-        placeholder="Rechercher (produit)…"
-        :disabled="loading"
-      />
+      <div class="table-left-actions">
+        <button
+          type="button"
+          class="table-fullscreen-btn"
+          :disabled="loading"
+          @click="toggleFullscreen"
+        >
+          {{ isFullscreen ? "Quitter plein écran" : "Plein écran" }}
+        </button>
+        <input
+          class="table-search"
+          type="search"
+          v-model="q"
+          placeholder="Rechercher (produit)…"
+          :disabled="loading"
+        />
+      </div>
       
       <div class="table-toolbar">   
           <MultiSelectChips
@@ -34,7 +44,7 @@
       <span class="table-hint" v-else>{{  rows.length }} Produits</span>
     </div>
 
-    <div class="table-wrap-month">
+    <div ref="tableWrap" class="table-wrap-month">
       <table class="nice-table">
         <thead>
           <tr>
@@ -81,7 +91,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 
 /**
  * Props reçues depuis Dashboard:
@@ -108,6 +118,12 @@ const selectedEtats = ref([]);  // ex: ["Bon stock", "Sous-stock"]
 // Tri (facultatif, mais pratique)
 const sortKey = ref("produit"); // par défaut tri sur produit
 const sortDir = ref("asc");     // "asc" ou "desc"
+const tableShell = ref(null);
+const tableWrap = ref(null);
+const isFullscreen = ref(false);
+const savedPageScrollY = ref(0);
+const savedPageScrollX = ref(0);
+const savedTableScrollTop = ref(0);
 
 
 // =======================================================
@@ -117,6 +133,21 @@ const sortDir = ref("asc");     // "asc" ou "desc"
 // Normaliser un texte pour comparer (recherche)
 function norm(s) {
   return String(s ?? "").toLowerCase().trim();
+}
+
+function normalizeStatus(status) {
+  const raw = String(status ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+
+  if (raw.includes("rupture")) return "rupture";
+  if (raw.includes("dormant")) return "stock dormant";
+  if (raw.includes("sous")) return "sous-stock";
+  if (raw.includes("bon")) return "bon stock";
+  if (raw.includes("sur")) return "sur-stock";
+  return raw;
 }
 
 // Format des quantités (arrondi entier + séparateurs FR)
@@ -135,9 +166,13 @@ function fmtCmm(v) {
 
 // Classe CSS selon l'état de stock (si tu utilises des badges)
 function badgeClass(etat) {
-  if (etat === "Bon stock") return "ok";
-  if (etat === "Sur-stock") return "warn";
-  if (etat === "Sous-stock") return "bad";
+  const status = normalizeStatus(etat);
+
+  if (status === "rupture") return "etat-rupture";
+  if (status === "stock dormant") return "etat-dormant";
+  if (status === "sous-stock") return "etat-sous-stock";
+  if (status === "bon stock") return "etat-bon-stock";
+  if (status === "sur-stock") return "etat-sur-stock";
   return "";
 }
 
@@ -148,6 +183,53 @@ function setSort(key) {
   } else {
     sortKey.value = key;
     sortDir.value = "asc";
+  }
+}
+
+function handleFullscreenChange() {
+  const active = document.fullscreenElement === tableShell.value;
+  isFullscreen.value = active;
+
+  if (active) {
+    requestAnimationFrame(() => {
+      if (tableWrap.value) {
+        tableWrap.value.scrollTop = savedTableScrollTop.value;
+      }
+    });
+    return;
+  }
+
+  // Si on sort du plein écran (bouton, Échap, etc.), on restaure la position page.
+  setTimeout(() => {
+    window.scrollTo({
+      top: savedPageScrollY.value,
+      left: savedPageScrollX.value,
+      behavior: "auto",
+    });
+  }, 0);
+}
+
+async function toggleFullscreen() {
+  const el = tableShell.value;
+  if (!el || !document?.fullscreenEnabled) return;
+
+  try {
+    if (document.fullscreenElement === el) {
+      await document.exitFullscreen();
+      return;
+    }
+
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+    }
+
+    savedPageScrollY.value = window.scrollY || window.pageYOffset || 0;
+    savedPageScrollX.value = window.scrollX || window.pageXOffset || 0;
+    savedTableScrollTop.value = tableWrap.value?.scrollTop || 0;
+
+    await el.requestFullscreen();
+  } catch {
+    // no-op: certains navigateurs peuvent bloquer le plein écran.
   }
 }
 
@@ -239,6 +321,15 @@ const rows = computed(() => [...filtered.value].sort(cmp));
 // =======================================================
 
 import MultiSelectChips from "@/components/MultiSelectChips.vue";
+
+onMounted(() => {
+  document.addEventListener("fullscreenchange", handleFullscreenChange);
+  handleFullscreenChange();
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener("fullscreenchange", handleFullscreenChange);
+});
 
 
 </script>

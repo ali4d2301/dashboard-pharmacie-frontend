@@ -8,30 +8,96 @@ import { ref, onMounted, onBeforeUnmount, watch } from "vue";
 
 const props = defineProps({
   items: { type: Array, default: () => [] }, // [{mouvement, type, value}]
-  title: { type: String, default: "Mouvements (entrée vs sortie)" },
 });
+
+// Couleurs dédiées au graphique "mouvements"
+// (volontairement différentes de Bon stock et Rupture).
+const MOVEMENT_COLORS = {
+  entree: "#12b76a",
+  sortie: "#f04438",
+};
 
 const el = ref(null);
 let chart = null;
 
+function formatInt(value) {
+  return new Intl.NumberFormat("fr-FR").format(Number(value || 0));
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function tooltipFormatter(param) {
+  const x = param?.name ?? "-";
+  const y = Number(param?.value ?? 0);
+
+  return `
+    <div style="min-width: 150px;">
+      <div style="font-weight:700; font-size:13px; margin-bottom:6px;">
+        ${escapeHtml(x)}
+      </div>
+      <div style="font-size:14px; font-weight:700;">
+        ${formatInt(y)}
+      </div>
+    </div>
+  `;
+}
+
 function buildSeries(labels, mapByType) {
-  const entree = labels.map(l => (mapByType.get(l)?.entree ?? 0));
-  const sortie = labels.map(l => (mapByType.get(l)?.sortie ?? 0));
+  const entree = labels.map((label) => mapByType.get(label)?.entree ?? 0);
+  const sortie = labels.map((label) => mapByType.get(label)?.sortie ?? 0);
+
+  const valueLabel = {
+    show: true,
+    position: "inside",
+    color: "#ffffff",
+    fontWeight: 700,
+    fontSize: 11,
+    formatter: ({ value }) => (Number(value || 0) > 0 ? formatInt(value) : ""),
+  };
 
   return [
     {
       name: "Entrée",
       type: "bar",
       stack: "total",
+      barMaxWidth: 42,
       data: entree,
-      itemStyle: { color: "#16a34a" }, // vert
+      label: valueLabel,
+      itemStyle: {
+        color: MOVEMENT_COLORS.entree,
+        borderRadius: [8, 8, 0, 0],
+      },
+      emphasis: {
+        itemStyle: {
+          shadowBlur: 14,
+          shadowColor: "rgba(18, 183, 106, 0.35)",
+        },
+      },
     },
     {
       name: "Sortie",
       type: "bar",
       stack: "total",
+      barMaxWidth: 42,
       data: sortie,
-      itemStyle: { color: "#dc2626" }, // rouge
+      label: valueLabel,
+      itemStyle: {
+        color: MOVEMENT_COLORS.sortie,
+        borderRadius: [8, 8, 0, 0],
+      },
+      emphasis: {
+        itemStyle: {
+          shadowBlur: 14,
+          shadowColor: "rgba(240, 68, 56, 0.35)",
+        },
+      },
     },
   ];
 }
@@ -41,36 +107,62 @@ function render() {
 
   // Regrouper par mouvement
   const map = new Map(); // mouvement -> {entree, sortie}
-  for (const it of props.items) {
-    const m = it.mouvement;
-    const t = (it.type || "").toLowerCase(); // entree/sortie
-    const v = Number(it.value || 0);
+  for (const item of props.items) {
+    const mouvement = item.mouvement;
+    const type = (item.type || "").toLowerCase(); // entree/sortie
+    const value = Number(item.value || 0);
 
-    if (!map.has(m)) map.set(m, {});
-    map.get(m)[t] = (map.get(m)[t] ?? 0) + v;
+    if (!map.has(mouvement)) map.set(mouvement, {});
+    map.get(mouvement)[type] = (map.get(mouvement)[type] ?? 0) + value;
   }
 
-  const labels = Array.from(map.keys()) // Pour ranger par ordre décroissant
-  .sort((a, b) => ((map.get(b)?.entree ?? 0) + (map.get(b)?.sortie ?? 0)) - ((map.get(a)?.entree ?? 0) + (map.get(a)?.sortie ?? 0)));
+  const labels = Array.from(map.keys()).sort(
+    (a, b) =>
+      (map.get(b)?.entree ?? 0) + (map.get(b)?.sortie ?? 0) - ((map.get(a)?.entree ?? 0) + (map.get(a)?.sortie ?? 0))
+  );
 
   const series = buildSeries(labels, map);
 
   chart.setOption(
     {
-      title: { text: props.title, left: "left" },
-      tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
-      legend: { top: 8, right: 10 },
-      grid: { left: 40, right: 20, top: 60, bottom: 70 },
-      xAxis: { type: "category", data: labels, axisLabel: { rotate: 20, interval: 0 } },
-      yAxis: { type: "value" },
+      tooltip: {
+        trigger: "item",
+        backgroundColor: "#0f172a",
+        borderWidth: 0,
+        padding: [10, 12],
+        textStyle: { color: "#f8fafc" },
+        formatter: tooltipFormatter,
+      },
+      legend: {
+        top: 8,
+        right: 10,
+        icon: "roundRect",
+        itemWidth: 18,
+        itemHeight: 10,
+        textStyle: { color: "#475569", fontWeight: 600 },
+      },
+      grid: { left: 24, right: 18, top: 44, bottom: 72 },
+      xAxis: {
+        type: "category",
+        data: labels,
+        axisTick: { alignWithLabel: true },
+        axisLine: { lineStyle: { color: "#cbd5e1" } },
+        axisLabel: { rotate: 20, interval: 0, color: "#475569" },
+      },
+      yAxis: {
+        type: "value",
+        show: false,
+      },
       series,
+      animationDuration: 500,
+      animationEasing: "cubicOut",
     },
     true
   );
 }
 
 function resize() {
-  chart && chart.resize();
+  if (chart) chart.resize();
 }
 
 onMounted(() => {
@@ -81,7 +173,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener("resize", resize);
-  chart && chart.dispose();
+  if (chart) chart.dispose();
   chart = null;
 });
 
@@ -89,5 +181,8 @@ watch(() => props.items, render, { deep: true });
 </script>
 
 <style scoped>
-.echart { width: 100%; height: 360px; }
+.echart {
+  width: 100%;
+  height: 360px;
+}
 </style>
