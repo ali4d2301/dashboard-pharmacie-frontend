@@ -7,6 +7,11 @@ import {
   notifyAuthChanged,
   setAuthNotice,
 } from "@/utils/auth";
+import {
+  ensureServerReady,
+  hasServerBeenIdleLongEnough,
+  touchServerWarmup,
+} from "@/services/serverWarmup";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE,
@@ -41,6 +46,9 @@ function scheduleBrowserRedirect(path) {
 }
 
 api.interceptors.request.use((config) => {
+  const requestPath = getRequestPath(config);
+  const isAuthBootstrapRequest =
+    requestPath === "/api/auth/login" || requestPath === "/api/auth/ready";
   const token = window.localStorage.getItem("pharmacie_access_token");
 
   if (token) {
@@ -48,16 +56,40 @@ api.interceptors.request.use((config) => {
     config.headers.Authorization = `Bearer ${token}`;
   }
 
+  if (token && !isAuthBootstrapRequest && hasServerBeenIdleLongEnough()) {
+    return ensureServerReady({ silent: false }).then(() => config);
+  }
+
   return config;
 });
 
 api.interceptors.response.use(
-  (response) => response,
-  (error) => {
+  (response) => {
+    touchServerWarmup();
+    return response;
+  },
+  async (error) => {
     const status = Number(error?.response?.status || 0);
     const requestPath = getRequestPath(error?.config);
     const isAuthBootstrapRequest =
       requestPath === "/api/auth/login" || requestPath === "/api/auth/ready";
+    const requestCode = String(error?.code || "").trim().toUpperCase();
+    const requestMethod = String(error?.config?.method || "get").trim().toUpperCase();
+    const isRetryableMethod =
+      requestMethod === "GET" || requestMethod === "HEAD" || requestMethod === "OPTIONS";
+    const shouldRetryForServerWakeup =
+      !isAuthBootstrapRequest &&
+      isRetryableMethod &&
+      !error?.config?.__serverWakeRetry &&
+      (!status || [408, 425, 429, 500, 502, 503, 504].includes(status) || requestCode === "ECONNABORTED");
+
+    if (shouldRetryForServerWakeup) {
+      const serverReady = await ensureServerReady({ force: true, silent: false });
+      if (serverReady && error?.config) {
+        error.config.__serverWakeRetry = true;
+        return api.request(error.config);
+      }
+    }
 
     if (!isAuthBootstrapRequest && (status === 401 || status === 403)) {
       const { token, role } = getStoredAuth();
