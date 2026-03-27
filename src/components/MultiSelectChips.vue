@@ -62,14 +62,30 @@ const search = ref("");
 const local = ref([...props.modelValue]);
 const root = ref(null);
 
+function sameArray(left, right) {
+  if (left === right) return true;
+  if (!Array.isArray(left) || !Array.isArray(right)) return false;
+  if (left.length !== right.length) return false;
+  return left.every((value, index) => value === right[index]);
+}
+
 watch(
   () => props.modelValue,
   (value) => {
+    if (sameArray(local.value, value)) return;
     local.value = [...value];
-  }
+  },
+  { deep: true }
 );
 
-watch(local, (value) => emit("update:modelValue", value));
+watch(
+  local,
+  (value) => {
+    if (sameArray(value, props.modelValue)) return;
+    emit("update:modelValue", [...value]);
+  },
+  { deep: true }
+);
 
 const filteredOptions = computed(() => {
   const query = String(search.value || "").toLowerCase().trim();
