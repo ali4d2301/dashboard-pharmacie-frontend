@@ -77,6 +77,10 @@
       </div>
     </div>
 
+    <p v-if="errorMessage" class="notice notice--error" role="alert">
+      {{ errorMessage }}
+    </p>
+
     <div class="table-wrap">
       <div ref="tableHeadEl" class="table-head-scroll" :style="tableHeadStyle">
         <table class="tbl tbl-head">
@@ -181,6 +185,7 @@ const emit = defineEmits(["update:dateFrom", "update:dateTo"]);
 
 const rows = ref([]);
 const loading = ref(false);
+const errorMessage = ref("");
 
 const limit = ref(5000);
 
@@ -386,6 +391,23 @@ function isRequestCanceled(err) {
   return err?.name === "CanceledError" || err?.code === "ERR_CANCELED";
 }
 
+function getRequestErrorMessage(error, fallback) {
+  const detail = error?.response?.data?.detail;
+
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => String(item?.msg || item || "").trim())
+      .filter(Boolean)
+      .join(" ");
+  }
+
+  if (typeof detail === "string" && detail.trim()) {
+    return detail.trim();
+  }
+
+  return fallback;
+}
+
 function useAutoRemoteMovements({ keyRef, filtersKeyRef, paramsRef }) {
   let debounceTimer = null;
   let rowsAbortCtrl = null;
@@ -404,6 +426,7 @@ function useAutoRemoteMovements({ keyRef, filtersKeyRef, paramsRef }) {
     filtersAbortCtrl = refreshFilters ? new AbortController() : null;
 
     loading.value = true;
+    errorMessage.value = "";
     try {
       const rowsRequest = api.get("/api/dashboard/movements", {
         params: paramsRef.value,
@@ -420,16 +443,29 @@ function useAutoRemoteMovements({ keyRef, filtersKeyRef, paramsRef }) {
           })
         : Promise.resolve(null);
 
-      const [res, resF] = await Promise.all([rowsRequest, filtersRequest]);
+      const [rowsResult, filtersResult] = await Promise.allSettled([
+        rowsRequest,
+        filtersRequest,
+      ]);
 
       if (currentRequestId !== requestId) return;
 
-      rows.value = res.data.items || [];
+      if (rowsResult.status === "rejected") {
+        throw rowsResult.reason;
+      }
 
-      if (resF) {
-        classes.value = resF.data.classes || [];
-        cibles.value = resF.data.cibles || [];
+      rows.value = rowsResult.value.data.items || [];
+
+      if (filtersResult.status === "fulfilled" && filtersResult.value) {
+        classes.value = filtersResult.value.data.classes || [];
+        cibles.value = filtersResult.value.data.cibles || [];
         hasLoadedFilters = true;
+      } else if (
+        filtersResult.status === "rejected" &&
+        !isRequestCanceled(filtersResult.reason)
+      ) {
+        errorMessage.value =
+          "Les mouvements sont affiches, mais les filtres n'ont pas pu etre mis a jour.";
       }
 
       await nextTick();
@@ -437,6 +473,11 @@ function useAutoRemoteMovements({ keyRef, filtersKeyRef, paramsRef }) {
       syncScroll();
     } catch (err) {
       if (!isRequestCanceled(err)) {
+        rows.value = [];
+        errorMessage.value = getRequestErrorMessage(
+          err,
+          "Chargement de l'historique impossible pour le moment."
+        );
         console.error("Erreur chargement dashboard:", err);
       }
     } finally {
@@ -667,6 +708,23 @@ const cols = ref([
   flex-direction: column;
   gap: 10px;
   margin: 0 0 10px;
+}
+
+.notice {
+  margin: 0 0 10px;
+  padding: 11px 13px;
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.notice--error {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
 }
 
 .filters {

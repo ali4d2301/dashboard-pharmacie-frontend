@@ -24,7 +24,6 @@
         Enregistrer <span v-if="dirtyCount">({{ dirtyCount }})</span>
       </button>
 
-
       <span class="msg" v-if="msg">{{ msg }}</span>
     </div>
 
@@ -34,7 +33,7 @@
           <tr>
             <th>ID</th>
             <th>Date mouvement</th>
-            <th>Quantité</th>
+            <th>Quantite</th>
             <th>Type</th>
             <th>Mouvement</th>
             <th>Commentaire</th>
@@ -48,14 +47,14 @@
 
             <td>
               <input
-                type="date"
                 v-model="r._edit.date_mvt"
+                type="date"
                 :max="todayIso"
               />
             </td>
 
             <td>
-              <input type="number" min="0" step="0.01" v-model.number="r._edit.quantite" />
+              <input v-model.number="r._edit.quantite" type="number" min="0" step="0.01" />
             </td>
 
             <td>
@@ -80,7 +79,6 @@
             <td>
               <input v-model.trim="r._edit.commentaire" placeholder="..." />
             </td>
-
           </tr>
         </tbody>
       </table>
@@ -88,23 +86,23 @@
       <div class="count">{{ rows.length }} mouvement(s)</div>
     </div>
 
-    <div v-else class="empty" v-if="searched && !loading">
-      Aucun mouvement trouvé.
+    <div v-else-if="searched && !loading" class="empty">
+      Aucun mouvement trouve.
     </div>
   </div>
 </template>
 
 <script setup>
-import { onMounted, computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 
-const API = "http://127.0.0.1:8000";
+import api from "@/services/api";
+
 const todayIso = ref(getTodayISODate());
 
-const codeProd = ref("");   // saisi user
-const day = ref("");        // YYYY-MM-DD (input type="date")
+const codeProd = ref("");
+const day = ref("");
 
-const rows = ref([]);       // mouvements trouvés (source)
-const draft = ref({});      // copie editable indexée par id
+const rows = ref([]);
 const msg = ref("");
 const loading = ref(false);
 const searched = ref(false);
@@ -118,11 +116,30 @@ function isFutureDate(value) {
   return String(value).slice(0, 10) > getTodayISODate();
 }
 
-/** Charger les mouvements du produit à la date donnée */
+function toDateInputValue(value) {
+  return value ? String(value).slice(0, 10) : "";
+}
+
+function getRequestErrorMessage(error, fallback) {
+  const detail = error?.response?.data?.detail;
+
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => String(item?.msg || item || "").trim())
+      .filter(Boolean)
+      .join(" ");
+  }
+
+  if (typeof detail === "string" && detail.trim()) {
+    return detail.trim();
+  }
+
+  return fallback;
+}
+
 async function reload() {
   msg.value = "";
   rows.value = [];
-  draft.value = {};
   todayIso.value = getTodayISODate();
 
   if (!codeProd.value || !day.value) return;
@@ -132,79 +149,72 @@ async function reload() {
   }
 
   loading.value = true;
+  searched.value = true;
+
   try {
-    const qs = new URLSearchParams({
-      code_prod: codeProd.value,
-      day: day.value,
+    const { data } = await api.get("/api/movements/edit", {
+      params: {
+        code_prod: codeProd.value,
+        day: day.value,
+      },
     });
 
-    searched.value = true;
-
-    const res = await fetch(`${API}/api/movements/edit?${qs.toString()}`);
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      msg.value = "Erreur: " + (err.detail || res.statusText);
-      return;
-    }
-
-    const data = await res.json();
-    rows.value = (data || []).map(r => ({
-      ...r,
-      _saving: false,
+    rows.value = (data || []).map((row) => ({
+      ...row,
       _edit: {
-        date_mvt: r.date_mvt, // doit déjà être "YYYY-MM-DD"
-        quantite: r.quantite,
-        type_mvt: r.type_mvt,
-        mouvement: r.mouvement,
-        commentaire: r.commentaire ?? "",
-      }
+        date_mvt: toDateInputValue(row.date_mvt),
+        quantite: row.quantite,
+        type_mvt: row.type_mvt,
+        mouvement: row.mouvement,
+        commentaire: row.commentaire ?? "",
+      },
     }));
 
-
-    // copie pour édition/comparaison (indexée par id)
-    const d = {};
-    for (const r of rows.value) {
-      d[r.id] = {
-        date_mvt: toDatetimeLocalValue(r.date_mvt),
-        quantite: r.quantite,
-        type_mvt: r.type_mvt,
-        mouvement: r.mouvement,
-        commentaire: r.commentaire ?? "",
-      };
+    if (rows.value.length === 0) {
+      msg.value = "Aucun mouvement trouve.";
     }
-    draft.value = d;
-
-    if (rows.value.length === 0) msg.value = "Aucun mouvement trouvé.";
-  } catch (e) {
-    msg.value = "Erreur réseau/serveur.";
+  } catch (error) {
+    msg.value = `Erreur: ${getRequestErrorMessage(error, "chargement impossible.")}`;
   } finally {
     loading.value = false;
   }
 }
 
-/** Construire les patches : uniquement champs autorisés et uniquement si changé */
 function buildPatches() {
   const patches = [];
 
-  for (const r of rows.value) {
-    const after = r._edit;
+  for (const row of rows.value) {
+    const after = row._edit;
     if (!after) continue;
 
-    const patch = { id: r.id };
+    const patch = { id: row.id };
     let changed = false;
 
-    if (after.date_mvt !== r.date_mvt) {
-      patch.date_mvt = after.date_mvt; // "YYYY-MM-DD"
+    if (after.date_mvt !== toDateInputValue(row.date_mvt)) {
+      patch.date_mvt = after.date_mvt;
       changed = true;
     }
 
+    if (Number(after.quantite) !== Number(row.quantite)) {
+      patch.quantite = Number(after.quantite);
+      changed = true;
+    }
+    if (after.type_mvt !== row.type_mvt) {
+      patch.type_mvt = after.type_mvt;
+      changed = true;
+    }
+    if (after.mouvement !== row.mouvement) {
+      patch.mouvement = after.mouvement;
+      changed = true;
+    }
+    if ((after.commentaire ?? "") !== (row.commentaire ?? "")) {
+      patch.commentaire = after.commentaire;
+      changed = true;
+    }
 
-    if (Number(after.quantite) !== Number(r.quantite)) { patch.quantite = Number(after.quantite); changed = true; }
-    if (after.type_mvt !== r.type_mvt) { patch.type_mvt = after.type_mvt; changed = true; }
-    if (after.mouvement !== r.mouvement) { patch.mouvement = after.mouvement; changed = true; }
-    if ((after.commentaire ?? "") !== (r.commentaire ?? "")) { patch.commentaire = after.commentaire; changed = true; }
-
-    if (changed) patches.push(patch);
+    if (changed) {
+      patches.push(patch);
+    }
   }
 
   return patches;
@@ -212,7 +222,6 @@ function buildPatches() {
 
 const dirtyCount = computed(() => buildPatches().length);
 
-/** Enregistrer (PUT en lot) */
 async function save() {
   msg.value = "";
   todayIso.value = getTodayISODate();
@@ -229,31 +238,19 @@ async function save() {
     return;
   }
 
-  const res = await fetch(`${API}/api/movements/edit`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(patches),
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    msg.value = "Erreur: " + (err.detail || res.statusText);
-    return;
+  try {
+    const { data } = await api.put("/api/movements/edit", patches);
+    msg.value = `OK: ${data.updated} ligne(s) mise(s) a jour.`;
+    await reload();
+  } catch (error) {
+    msg.value = `Erreur: ${getRequestErrorMessage(error, "sauvegarde impossible.")}`;
   }
-
-  const out = await res.json();
-  msg.value = `✅ ${out.updated} ligne(s) mise(s) à jour.`;
-  await reload();
 }
-
-/** Optionnel : auto-reload si tu veux (sinon tu relies au bouton Rechercher) */
-// onMounted(() => {}); // je laisse vide volontairement
 
 onMounted(() => {
   todayIso.value = getTodayISODate();
 });
 </script>
-
 
 <style scoped>
 .page { max-width: 1100px; margin: 0 auto; padding: 16px; }

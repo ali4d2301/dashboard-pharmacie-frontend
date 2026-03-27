@@ -266,6 +266,17 @@
   background: linear-gradient(90deg, rgba(148, 163, 184, 0), rgba(148, 163, 184, 0.45), rgba(148, 163, 184, 0));
 }
 
+.dashboard-page .dashboard-alert {
+  margin: 10px 0 0;
+  padding: 11px 13px;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 14px;
+  font-weight: 700;
+}
+
 .dashboard-page .stack {
   display: flex;
   flex-direction: column;

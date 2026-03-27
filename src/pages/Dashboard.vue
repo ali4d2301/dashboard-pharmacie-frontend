@@ -83,6 +83,9 @@
       </div>
 
       <div class="divider"></div>
+      <p v-if="dashboardError" class="dashboard-alert" role="alert">
+        {{ dashboardError }}
+      </p>
     </div>
 
     <div v-show="activeTab === 'synthese'" class="stack">
@@ -242,18 +245,16 @@ import "./Dashboard_page/Dashboard.css";
 import EtatStockDonut from "../components/EtatStockDonut.vue";
 import MovementTypeBarChart from "../components/MovementTypeBarChart.vue";
 import MonthlyStockTable from "../components/MonthlyStockTable.vue";
+import {
+  clearStoredAuth,
+  getStoredRole,
+  notifyAuthChanged,
+} from "@/utils/auth";
 
 const ProductCatalogTable = defineAsyncComponent(() => import("../components/ProductCatalogTable.vue"));
 const MovementsHistory = defineAsyncComponent(() => import("../components/MovementsHistory.vue"));
 
 const router = useRouter();
-
-const AUTH_KEYS = [
-  "pharmacie_access_token",
-  "pharmacie_token_type",
-  "pharmacie_user_role",
-  "pharmacie_username",
-];
 
 const {
   activeTab,
@@ -263,6 +264,7 @@ const {
   periodYear,
   theraClass,
   theraClasses,
+  dashboardError,
   kpis,
   etatStockShare,
   movementHist,
@@ -447,15 +449,11 @@ onBeforeUnmount(() => {
 });
 
 function handleBack() {
-  const role = (window.localStorage.getItem("pharmacie_user_role") || "")
-    .trim()
-    .toLowerCase();
+  const role = getStoredRole();
 
   if (role === "viewer") {
-    for (const key of AUTH_KEYS) {
-      window.localStorage.removeItem(key);
-    }
-    window.dispatchEvent(new Event("pharmacie-auth-changed"));
+    clearStoredAuth();
+    notifyAuthChanged();
     router.replace("/");
     return;
   }

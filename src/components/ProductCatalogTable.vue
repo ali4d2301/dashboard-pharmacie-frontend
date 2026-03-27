@@ -35,6 +35,13 @@
       </div>
     </div>
 
+    <p v-if="errorMessage" class="status-banner status-banner--error" role="alert">
+      {{ errorMessage }}
+    </p>
+    <p v-else-if="loading && rows.length === 0" class="status-banner" role="status">
+      Chargement du catalogue en cours...
+    </p>
+
     <div class="tableHead" ref="headEl" :style="tableHeadStyle">
       <table class="tbl" :style="tableStyle">
         <colgroup>
@@ -114,7 +121,9 @@
             </tr>
 
             <tr v-if="!filteredRows.length">
-              <td :colspan="columns.length" class="empty">Aucun produit</td>
+              <td :colspan="emptyStateColspan" class="empty">
+                {{ loading ? "Chargement..." : "Aucun produit" }}
+              </td>
             </tr>
           </tbody>
         </table>
@@ -145,6 +154,8 @@ const savedPageScrollY = ref(0);
 const savedPageScrollX = ref(0);
 const shellHeight = ref(null);
 const columnWidths = ref({});
+const loading = ref(false);
+const errorMessage = ref("");
 
 const NUM_COLS = new Set([
   "prix_achat",
@@ -187,6 +198,7 @@ const DEFAULT_WIDTH_MAP = {
 const tableStyle = computed(() => ({
   width: `${columns.value.reduce((sum, col) => sum + getColumnWidth(col), 0)}px`,
 }));
+const emptyStateColspan = computed(() => Math.max(columns.value.length, 1));
 
 const COL_LABELS = {
   code: "Code",
@@ -412,6 +424,23 @@ function formatCell(col, value) {
   return String(value);
 }
 
+function getRequestErrorMessage(error, fallback) {
+  const detail = error?.response?.data?.detail;
+
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => String(item?.msg || item || "").trim())
+      .filter(Boolean)
+      .join(" ");
+  }
+
+  if (typeof detail === "string" && detail.trim()) {
+    return detail.trim();
+  }
+
+  return fallback;
+}
+
 function thClass(col) {
   return [
     col === "code" ? "col-code sticky-col sticky-col-1" : "",
@@ -601,12 +630,29 @@ async function toggleFullscreen() {
 }
 
 async function load() {
-  const { data } = await api.get("/api/dashboard/list_products");
-  columns.value = (data.columns || []).filter(
-    (col) => !["prix_achat", "prix_vente"].includes(col)
-  );
-  columnWidths.value = Object.fromEntries(columns.value.map((col) => [col, getDefaultWidth(col)]));
-  rows.value = data.rows || [];
+  loading.value = true;
+  errorMessage.value = "";
+
+  try {
+    const { data } = await api.get("/api/dashboard/list_products");
+    columns.value = (data.columns || []).filter(
+      (col) => !["prix_achat", "prix_vente"].includes(col)
+    );
+    columnWidths.value = Object.fromEntries(
+      columns.value.map((col) => [col, getDefaultWidth(col)])
+    );
+    rows.value = data.rows || [];
+  } catch (error) {
+    columns.value = [];
+    columnWidths.value = {};
+    rows.value = [];
+    errorMessage.value = getRequestErrorMessage(
+      error,
+      "Chargement du catalogue impossible pour le moment."
+    );
+  } finally {
+    loading.value = false;
+  }
 }
 
 onMounted(async () => {
@@ -682,6 +728,23 @@ watch([columns, columnWidths], async () => {
   flex-direction: column;
   gap: 12px;
   margin-bottom: 8px;
+}
+
+.status-banner {
+  margin: 0 0 10px;
+  padding: 11px 13px;
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.status-banner--error {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
 }
 
 .filters {

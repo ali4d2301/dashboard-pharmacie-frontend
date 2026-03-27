@@ -74,6 +74,7 @@ import { useRouter } from "vue-router";
 import HeaderBloc from "../components/Header.vue";
 import FooterNote from "../components/FooterNote.vue";
 import api from "../services/api";
+import { consumeAuthNotice, notifyAuthChanged } from "../utils/auth";
 
 const router = useRouter();
 
@@ -146,7 +147,7 @@ async function submitLogin() {
     window.localStorage.setItem("pharmacie_token_type", data.token_type || "bearer");
     window.localStorage.setItem("pharmacie_user_role", role);
     window.localStorage.setItem("pharmacie_username", form.value.username);
-    window.dispatchEvent(new Event("pharmacie-auth-changed"));
+    notifyAuthChanged();
 
     isLoggedIn.value = true;
     const redirectPath = role === "viewer" ? "/synthese" : "/accueil";
@@ -163,6 +164,10 @@ async function submitLogin() {
 }
 
 onMounted(() => {
+  const authNotice = consumeAuthNotice();
+  if (authNotice) {
+    errorMessage.value = authNotice;
+  }
   void warmUpApi();
 });
 </script>

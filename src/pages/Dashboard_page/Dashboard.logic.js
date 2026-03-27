@@ -5,10 +5,38 @@ import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 export function useDashboardLogic() {
   const TAB_STORAGE_KEY = "dashboard_active_tab";
   const VALID_TABS = ["synthese", "liste", "mvts"];
-  const DEFAULT_PERIOD_MONTH = 12;
-  const DEFAULT_PERIOD_YEAR = 2025;
   const DEFAULT_THERA_CLASS = "ALL";
-  const currentYear = new Date().getFullYear();
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const DEFAULT_PERIOD_MONTH = today.getMonth() + 1;
+  const DEFAULT_PERIOD_YEAR = currentYear;
+
+  function createDefaultKpis() {
+    return {
+      nb_produits_perimant: 0,
+      tx_dispo: "0 %",
+      taux_disponibilite_value: 0,
+      nb_produits_mouvement: 0,
+      nb_produits_actifs: 0,
+    };
+  }
+
+  function getRequestErrorMessage(error, fallback) {
+    const detail = error?.response?.data?.detail;
+
+    if (Array.isArray(detail)) {
+      return detail
+        .map((item) => String(item?.msg || item || "").trim())
+        .filter(Boolean)
+        .join(" ");
+    }
+
+    if (typeof detail === "string" && detail.trim()) {
+      return detail.trim();
+    }
+
+    return fallback;
+  }
 
   function getInitialTab() {
     if (typeof window === "undefined") return "synthese";
@@ -39,16 +67,11 @@ export function useDashboardLogic() {
 
   const years = Array.from({ length: 11 }, (_, i) => currentYear - 5 + i);
 
-  const kpis = ref({
-    nb_produits_perimant: 0,
-    tx_dispo: "0 %",
-    taux_disponibilite_value: 0,
-    nb_produits_mouvement: 0,
-    nb_produits_actifs: 0,
-  });
+  const kpis = ref(createDefaultKpis());
 
   const etatStockShare = ref([]);
   const syntheseLoaded = ref(false);
+  const dashboardError = ref("");
   let syntheseAbortCtrl = null;
   let monthlyTableAbortCtrl = null;
   let syntheseRequestId = 0;
@@ -72,9 +95,20 @@ export function useDashboardLogic() {
   }
 
   async function fetchClasses() {
-    //const { data } = await axios.get(`${API}/api/dashboard/classes`);
-    const { data } = await api.get("/api/dashboard/classes");
-    theraClasses.value = data.classes || [];
+    dashboardError.value = "";
+
+    try {
+      const { data } = await api.get("/api/dashboard/classes");
+      theraClasses.value = data.classes || [];
+    } catch (err) {
+      if (isRequestCanceled(err)) return;
+
+      theraClasses.value = [];
+      dashboardError.value = getRequestErrorMessage(
+        err,
+        "Chargement des classes du dashboard impossible pour le moment."
+      );
+    }
   }
 
   const movementHist = ref([]);
@@ -99,13 +133,10 @@ export function useDashboardLogic() {
     syntheseAbortCtrl = new AbortController();
     monthlyTableAbortCtrl = new AbortController();
     monthlyTableLoading.value = true;
-    const monthlyTablePromise = api.get("/api/dashboard/tableau_mensuel", {
-      params,
-      signal: monthlyTableAbortCtrl.signal,
-    });
+    dashboardError.value = "";
 
-    try {
-      const [kpisResponse, etatStockResponse, movementHistResponse] = await Promise.all([
+    const [kpisResult, etatStockResult, movementHistResult, monthlyTableResult] =
+      await Promise.allSettled([
         api.get("/api/dashboard/kpis", {
           params,
           signal: syntheseAbortCtrl.signal,
@@ -118,40 +149,73 @@ export function useDashboardLogic() {
           params,
           signal: syntheseAbortCtrl.signal,
         }),
+        api.get("/api/dashboard/tableau_mensuel", {
+          params,
+          signal: monthlyTableAbortCtrl.signal,
+        }),
       ]);
 
-      if (currentRequestId !== syntheseRequestId) return;
+    if (currentRequestId !== syntheseRequestId) return;
 
-      const kpisData = kpisResponse.data ?? {};
+    let hasError = false;
+
+    if (kpisResult.status === "fulfilled") {
+      const kpisData = kpisResult.value.data ?? {};
       kpis.value.nb_produits_perimant = kpisData.nb_produits_perimant ?? 0;
       kpis.value.taux_disponibilite_value = Number(kpisData.taux_disponibilite ?? 0) || 0;
       kpis.value.tx_dispo = `${kpis.value.taux_disponibilite_value} %`;
       kpis.value.nb_produits_mouvement = kpisData.nb_produits_mouvement ?? 0;
       kpis.value.nb_produits_actifs = kpisData.nb_produits_actifs ?? 0;
-
-      etatStockShare.value = etatStockResponse.data?.items || [];
-      movementHist.value = movementHistResponse.data?.items || [];
-      syntheseLoaded.value = true;
-    } catch (err) {
-      if (!isRequestCanceled(err)) {
-        console.error("Erreur chargement synthese:", err);
-      }
+    } else if (!isRequestCanceled(kpisResult.reason)) {
+      kpis.value = createDefaultKpis();
+      hasError = true;
+      console.error("Erreur chargement synthese:", kpisResult.reason);
     }
 
-    try {
-      const monthlyTableResponse = await monthlyTablePromise;
+    if (etatStockResult.status === "fulfilled") {
+      etatStockShare.value = etatStockResult.value.data?.items || [];
+    } else if (!isRequestCanceled(etatStockResult.reason)) {
+      etatStockShare.value = [];
+      hasError = true;
+      console.error("Erreur chargement etat de stock:", etatStockResult.reason);
+    }
 
-      if (currentRequestId !== syntheseRequestId) return;
+    if (movementHistResult.status === "fulfilled") {
+      movementHist.value = movementHistResult.value.data?.items || [];
+    } else if (!isRequestCanceled(movementHistResult.reason)) {
+      movementHist.value = [];
+      hasError = true;
+      console.error("Erreur chargement historique mouvements:", movementHistResult.reason);
+    }
 
-      monthlyTable.value = monthlyTableResponse.data?.data || [];
-    } catch (err) {
-      if (!isRequestCanceled(err)) {
-        console.error("Erreur chargement tableau mensuel:", err);
-      }
-    } finally {
-      if (currentRequestId === syntheseRequestId) {
-        monthlyTableLoading.value = false;
-      }
+    if (monthlyTableResult.status === "fulfilled") {
+      monthlyTable.value = monthlyTableResult.value.data?.data || [];
+    } else if (!isRequestCanceled(monthlyTableResult.reason)) {
+      monthlyTable.value = [];
+      hasError = true;
+      console.error("Erreur chargement tableau mensuel:", monthlyTableResult.reason);
+    }
+
+    syntheseLoaded.value = !hasError;
+    if (hasError) {
+      dashboardError.value = getRequestErrorMessage(
+        kpisResult.status === "rejected" && !isRequestCanceled(kpisResult.reason)
+          ? kpisResult.reason
+          : etatStockResult.status === "rejected" && !isRequestCanceled(etatStockResult.reason)
+            ? etatStockResult.reason
+            : movementHistResult.status === "rejected" &&
+                !isRequestCanceled(movementHistResult.reason)
+              ? movementHistResult.reason
+              : monthlyTableResult.status === "rejected" &&
+                  !isRequestCanceled(monthlyTableResult.reason)
+                ? monthlyTableResult.reason
+                : null,
+        "Certaines donnees du dashboard n'ont pas pu etre chargees."
+      );
+    }
+
+    if (currentRequestId === syntheseRequestId) {
+      monthlyTableLoading.value = false;
     }
   }
 
@@ -198,6 +262,7 @@ export function useDashboardLogic() {
     periodYear,
     theraClass,
     theraClasses,
+    dashboardError,
     kpis,
     etatStockShare,
     movementHist,

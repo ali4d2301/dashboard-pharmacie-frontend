@@ -22,20 +22,15 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useRoute, useRouter } from "vue-router"
+import { AUTH_CHANGED_EVENT, clearStoredAuth, getStoredAuth, notifyAuthChanged } from "./utils/auth"
 
 const route = useRoute()
 const router = useRouter()
 
-const AUTH_KEYS = [
-  "pharmacie_access_token",
-  "pharmacie_token_type",
-  "pharmacie_user_role",
-  "pharmacie_username",
-]
-
 function readSession() {
+  const { token } = getStoredAuth()
   return {
-    token: window.localStorage.getItem("pharmacie_access_token") || "",
+    token,
     username: (window.localStorage.getItem("pharmacie_username") || "").trim(),
   }
 }
@@ -56,12 +51,12 @@ watch(
 
 onMounted(() => {
   window.addEventListener("storage", syncSession)
-  window.addEventListener("pharmacie-auth-changed", syncSession)
+  window.addEventListener(AUTH_CHANGED_EVENT, syncSession)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener("storage", syncSession)
-  window.removeEventListener("pharmacie-auth-changed", syncSession)
+  window.removeEventListener(AUTH_CHANGED_EVENT, syncSession)
 })
 
 const showLogout = computed(() => {
@@ -73,11 +68,9 @@ const userDisplayName = computed(() => {
 })
 
 function logout() {
-  for (const key of AUTH_KEYS) {
-    window.localStorage.removeItem(key)
-  }
+  clearStoredAuth()
   syncSession()
-  window.dispatchEvent(new Event("pharmacie-auth-changed"))
+  notifyAuthChanged()
   router.push("/")
 }
 </script>
