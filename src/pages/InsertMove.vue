@@ -2,7 +2,7 @@
   <div class="wrap">
     <div class="container">
       <div v-if="!hasSelectedType" class="top top--choice">
-        <button class="back" type="button" @click="router.push('/')">Retour</button>
+        <button class="back" type="button" @click="goBack">Retour</button>
       </div>
 
       <section v-if="!hasSelectedType" class="chooser-screen">
@@ -32,7 +32,7 @@
 
       <form v-else class="form" @submit.prevent="submit">
         <div class="top">
-          <button class="back" type="button" @click="router.push('/')">Retour</button>
+          <button class="back" type="button" @click="goBack">Retour</button>
           <h1>{{ pageTitle }}</h1>
           <p class="hint">{{ pageHint }}</p>
           <p v-if="msg" class="top-status" :class="{ 'is-error': msgType === 'err' }">{{ msg }}</p>
@@ -296,8 +296,13 @@ import { useRouter } from "vue-router";
 
 import SingleSelectFilter from "@/components/SingleSelectFilter.vue";
 import api from "@/services/api";
+import { getDefaultRouteForRole } from "@/utils/auth";
 
 const router = useRouter();
+
+function goBack() {
+  router.push(getDefaultRouteForRole());
+}
 
 const mvtsPositif = ["acquision", "ajustement positif"];
 const mvtsNegatif = ["dispensation", "perte", "peremption", "ajustement negatif"];

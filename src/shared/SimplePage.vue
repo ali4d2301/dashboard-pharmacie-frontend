@@ -1,7 +1,7 @@
 <template>
   <div class="wrap">
     <div class="container">
-      <a class="back" href="/" @click.prevent="$router.push('/')">← Retour</a>
+      <a class="back" href="/" @click.prevent="router.push(getDefaultRouteForRole())">← Retour</a>
       <h1>{{ title }}</h1>
       <p>Page en construction…</p>
     </div>
@@ -9,7 +9,12 @@
 </template>
 
 <script setup>
+import { useRouter } from "vue-router"
+import { getDefaultRouteForRole } from "@/utils/auth"
+
 defineProps({ title: String })
+
+const router = useRouter()
 </script>
 
 <style scoped>

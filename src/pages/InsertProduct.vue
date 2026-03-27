@@ -2,7 +2,7 @@
   <div class="wrap">
     <div class="container">
       <div class="top">
-        <button class="back" type="button" @click="router.push('/')">Retour</button>
+        <button class="back" type="button" @click="goBack">Retour</button>
         <h1>FORMULAIRE D'ENREGISTREMENT DE PRODUIT PHARMACEUTIQUE</h1>
         <p class="hint">
           Veuillez renseigner les informations avec grand soin. Le num&eacute;ro de lot et la
@@ -203,8 +203,13 @@ import { nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue"
 import { useRouter } from "vue-router";
 
 import api from "@/services/api";
+import { getDefaultRouteForRole } from "@/utils/auth";
 
 const router = useRouter();
+
+function goBack() {
+  router.push(getDefaultRouteForRole());
+}
 
 function getTodayDate() {
   const today = new Date();

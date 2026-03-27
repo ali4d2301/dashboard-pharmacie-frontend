@@ -2,7 +2,7 @@
   <div class="move-page">
     <div class="move-header">
       <div class="header-hist">
-        <a class="back" href="/" @click.prevent="$router.push('/')">&larr; Retour</a>
+        <a class="back" href="/" @click.prevent="goBack">&larr; Retour</a>
         <h1 class="title">Historique des mouvements</h1>
       </div>
 
@@ -17,8 +17,15 @@
 
 <script setup>
 import { defineAsyncComponent } from "vue";
+import { useRouter } from "vue-router";
+import { getDefaultRouteForRole } from "@/utils/auth";
 
 const MovementsHistory = defineAsyncComponent(() => import("../components/MovementsHistory.vue"));
+const router = useRouter();
+
+function goBack() {
+  router.push(getDefaultRouteForRole());
+}
 </script>
 
 <style scoped>

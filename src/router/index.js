@@ -8,15 +8,10 @@ import InsertMove from "../pages/InsertMove.vue";
 import EditProduct from "../pages/EditProduct.vue";
 import MovementsHistory from "../pages/HistMove.vue";
 import Dashboard from "../pages/Dashboard.vue";
+import { getDefaultRouteForRole, getStoredAuth, isKnownRole } from "../utils/auth";
 
 const READ_ROLES = ["admin", "viewer"];
 const ADMIN_ROLES = ["admin"];
-
-function getStoredAuth() {
-  const token = window.localStorage.getItem("pharmacie_access_token");
-  const role = window.localStorage.getItem("pharmacie_user_role");
-  return { token, role };
-}
 
 const routes = [
   {
@@ -47,20 +42,19 @@ const router = createRouter({
 router.beforeEach((to) => {
   const { token, role } = getStoredAuth();
   const isPublic = Boolean(to.meta.public);
-  const isKnownRole = role === "admin" || role === "viewer";
 
-  if (!token || !isKnownRole) {
+  if (!token || !isKnownRole(role)) {
     if (isPublic) return true;
     return { path: "/" };
   }
 
   if (isPublic) {
-    return { path: role === "viewer" ? "/synthese" : "/accueil" };
+    return true;
   }
 
   const allowedRoles = Array.isArray(to.meta.roles) ? to.meta.roles : [];
   if (allowedRoles.length > 0 && !allowedRoles.includes(role)) {
-    return { path: role === "viewer" ? "/synthese" : "/accueil" };
+    return { path: getDefaultRouteForRole(role) };
   }
 
   return true;

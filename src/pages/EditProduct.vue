@@ -3,7 +3,7 @@
     <div class="top-sticky">
       <section class="hero">
         <div>
-          <a class="back" href="/" @click.prevent="router.push('/')">&larr; Retour</a>
+          <a class="back" href="/" @click.prevent="goBack">&larr; Retour</a>
           <p class="eyebrow">Gestion des produits</p>
           <h2>&Eacute;DITION DE PRODUITS</h2>
           <p class="sub">
@@ -178,6 +178,7 @@ import { useRouter } from "vue-router";
 
 import MultiSelectChips from "@/components/MultiSelectChips.vue";
 import api from "@/services/api";
+import { getDefaultRouteForRole } from "@/utils/auth";
 
 const products = ref([]);
 const draft = ref({});
@@ -188,6 +189,10 @@ const router = useRouter();
 const tableHeadEl = ref(null);
 const tableBodyEl = ref(null);
 const headScrollbarWidth = ref(0);
+
+function goBack() {
+  router.push(getDefaultRouteForRole());
+}
 
 function normalizeText(value) {
   return (value ?? "")

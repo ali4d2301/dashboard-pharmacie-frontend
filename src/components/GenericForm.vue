@@ -2,7 +2,7 @@
   <div class="wrap">
     <div class="container">
       <div class="top">
-        <button class="back" type="button" @click="router.push('/')">← Retour</button>
+        <button class="back" type="button" @click="router.push(getDefaultRouteForRole())">← Retour</button>
         <h1>{{ title }}</h1>
         <p class="hint">Formulaire de base (évolutif)</p>
       </div>
@@ -71,6 +71,7 @@
 <script setup>
 import { reactive } from "vue"
 import { useRouter } from "vue-router"
+import { getDefaultRouteForRole } from "@/utils/auth"
 
 defineProps({
   title: { type: String, default: "Formulaire" },
