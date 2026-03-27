@@ -65,7 +65,7 @@ onBeforeUnmount(() => {
 })
 
 const showLogout = computed(() => {
-  return Boolean(session.value.token) && !route.meta?.public
+  return Boolean(session.value.token) && Boolean(route.meta?.showSessionActions)
 })
 
 const userDisplayName = computed(() => {
@@ -91,43 +91,44 @@ function logout() {
 
 .session-actions {
   position: fixed;
-  top: 14px;
-  right: 16px;
+  top: 12px;
+  right: 14px;
   z-index: 1000;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  opacity: 0.9;
 }
 
 .user-badge {
-  max-width: min(38vw, 220px);
-  border: 1px solid #dbe6eb;
-  background: #f6fafc;
-  color: #35515f;
-  border-radius: 10px;
-  padding: 9px 12px;
-  font-size: 14px;
-  font-weight: 700;
+  max-width: min(34vw, 180px);
+  border: 1px solid #d6e0e8;
+  background: rgba(248, 251, 253, 0.96);
+  color: #456073;
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 10px rgba(39, 59, 77, 0.08);
 }
 
 .logout-btn {
-  border: 1px solid #d5e2e8;
-  background: #ffffff;
-  color: #35515f;
-  border-radius: 10px;
-  padding: 9px 12px;
-  font-size: 14px;
-  font-weight: 700;
+  border: 1px solid #d6e0e8;
+  background: rgba(255, 255, 255, 0.96);
+  color: #456073;
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 4px 10px rgba(39, 59, 77, 0.1);
 }
 
 .logout-btn:hover {
-  background: #f4f8fa;
+  background: #f7fafc;
 }
 
 .logout-btn:active {
@@ -138,18 +139,18 @@ function logout() {
   .session-actions {
     top: 10px;
     right: 10px;
-    gap: 6px;
+    gap: 5px;
   }
 
   .user-badge {
-    max-width: 42vw;
-    padding: 8px 10px;
-    font-size: 13px;
+    max-width: 40vw;
+    padding: 6px 9px;
+    font-size: 11px;
   }
 
   .logout-btn {
-    padding: 8px 10px;
-    font-size: 13px;
+    padding: 6px 9px;
+    font-size: 11px;
   }
 }
 </style>

@@ -25,7 +25,12 @@ const routes = [
     component: Login,
     meta: { public: true },
   },
-  { path: "/accueil", alias: "/menu", component: Home, meta: { roles: ADMIN_ROLES } },
+  {
+    path: "/accueil",
+    alias: "/menu",
+    component: Home,
+    meta: { roles: ADMIN_ROLES, showSessionActions: true },
+  },
 
   { path: "/enregistrer-medicament", component: InsertProduct, meta: { roles: ADMIN_ROLES } },
   { path: "/enregistrer-mouvement", component: InsertMove, meta: { roles: ADMIN_ROLES } },

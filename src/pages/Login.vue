@@ -9,6 +9,9 @@
         <p class="subtitle">
           Connectez-vous pour acceder au suivi de la pharmacie.
         </p>
+        <p v-if="isWarmingUp && !loading" class="warmup-note">
+          Preparation du serveur...
+        </p>
 
         <form class="login-form" @submit.prevent="submitLogin">
           <div class="field">
@@ -20,6 +23,7 @@
               autocomplete="username"
               placeholder="Votre identifiant"
               :disabled="loading"
+              @focus="warmUpApi"
               required
             />
           </div>
@@ -33,6 +37,7 @@
               autocomplete="current-password"
               placeholder="Votre mot de passe"
               :disabled="loading"
+              @focus="warmUpApi"
               required
             />
           </div>
@@ -63,7 +68,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 
 import HeaderBloc from "../components/Header.vue";
@@ -78,13 +83,41 @@ const form = ref({
 });
 
 const loading = ref(false);
+const isWarmingUp = ref(false);
+const isApiReady = ref(false);
 const showPassword = ref(false);
 const errorMessage = ref("");
 const isLoggedIn = ref(false);
+let warmupPromise = null;
 
 const successMessage = computed(() =>
   isLoggedIn.value ? "Connexion reussie. Redirection..." : ""
 );
+
+function warmUpApi() {
+  if (isApiReady.value) {
+    return Promise.resolve(true);
+  }
+
+  if (warmupPromise) {
+    return warmupPromise;
+  }
+
+  isWarmingUp.value = true;
+  warmupPromise = api
+    .get("/api/auth/ready", { timeout: 15000 })
+    .then(() => {
+      isApiReady.value = true;
+      return true;
+    })
+    .catch(() => false)
+    .finally(() => {
+      isWarmingUp.value = false;
+      warmupPromise = null;
+    });
+
+  return warmupPromise;
+}
 
 async function submitLogin() {
   if (loading.value) return;
@@ -99,6 +132,7 @@ async function submitLogin() {
   loading.value = true;
 
   try {
+    void warmUpApi();
     const { data } = await api.post("/api/auth/login", {
       username: form.value.username,
       password: form.value.password,
@@ -116,10 +150,7 @@ async function submitLogin() {
 
     isLoggedIn.value = true;
     const redirectPath = role === "viewer" ? "/synthese" : "/accueil";
-
-    window.setTimeout(() => {
-      router.replace(redirectPath);
-    }, 500);
+    await router.replace(redirectPath);
   } catch (error) {
     const message =
       error?.response?.data?.detail ||
@@ -130,13 +161,17 @@ async function submitLogin() {
     loading.value = false;
   }
 }
+
+onMounted(() => {
+  void warmUpApi();
+});
 </script>
 
 <style scoped>
 .login-page {
   min-height: 100vh;
   background: #fff;
-  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  font-family: Arial, sans-serif;
   display: grid;
   grid-template-rows: auto 1fr auto;
 }
@@ -173,6 +208,7 @@ async function submitLogin() {
 
 h1 {
   margin: 12px 0 6px;
+  font-family: "Arial Black", Arial, sans-serif;
   color: #1f2e37;
   font-size: 34px;
   line-height: 1.05;
@@ -182,6 +218,13 @@ h1 {
   margin: 0 0 12px;
   color: #56656f;
   font-size: 15px;
+}
+
+.warmup-note {
+  margin: -4px 0 12px;
+  color: #7b8790;
+  font-size: 13px;
+  font-style: italic;
 }
 
 .login-form {
@@ -204,6 +247,7 @@ h1 {
   border: 1px solid #cfdae0;
   border-radius: 12px;
   padding: 10px 12px;
+  font-family: inherit;
   font-size: 15px;
   color: #1f2e37;
   background: #fff;
@@ -225,6 +269,7 @@ h1 {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  font-family: inherit;
   font-size: 14px;
   color: #56656f;
 }
@@ -263,6 +308,7 @@ h1 {
   border: none;
   border-radius: 12px;
   padding: 12px 14px;
+  font-family: inherit;
   font-size: 15px;
   font-weight: 800;
   cursor: pointer;

@@ -22,7 +22,7 @@
 .header {
   border-top: 4px solid #3b5563;
   padding: 10px 0;
-  margin-bottom: 0px;
+  margin-bottom: -8px;
 }
 
 .container {
@@ -41,7 +41,7 @@
 }
 
 .logos {
-  margin: 20px 0;
+  margin: 16px 0 8px;
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
 }
@@ -68,6 +68,7 @@
 .title {
   text-align: center;
   font-size: 48px;
+  margin-top: 6px;
   margin-bottom: 0px; /* réduit l’espace */
   font-family: "Arial Black", Arial, sans-serif;
 }

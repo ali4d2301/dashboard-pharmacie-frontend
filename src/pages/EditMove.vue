@@ -13,7 +13,7 @@
 
       <div class="field">
         <label>Date (jour du mouvement)</label>
-        <input v-model="day" type="date" />
+        <input v-model="day" type="date" :max="todayIso" />
       </div>
 
       <button class="primary" type="button" @click="reload" :disabled="loading || !codeProd || !day">
@@ -50,6 +50,7 @@
               <input
                 type="date"
                 v-model="r._edit.date_mvt"
+                :max="todayIso"
               />
             </td>
 
@@ -66,12 +67,13 @@
 
             <td>
               <select v-model="r._edit.mouvement">
-                <option value="achat">achat</option>
-                <option value="vente">vente</option>
+                <option value="acquision">acquision</option>
+                <option value="dispensation">dispensation</option>
                 <option value="perte">perte</option>
                 <option value="peremption">peremption</option>
-                <option value="don">don</option>
                 <option value="ajustement">ajustement</option>
+                <option value="ajustement positif">ajustement positif</option>
+                <option value="ajustement negatif">ajustement negatif</option>
               </select>
             </td>
 
@@ -96,6 +98,7 @@
 import { onMounted, computed, ref } from "vue";
 
 const API = "http://127.0.0.1:8000";
+const todayIso = ref(getTodayISODate());
 
 const codeProd = ref("");   // saisi user
 const day = ref("");        // YYYY-MM-DD (input type="date")
@@ -106,13 +109,27 @@ const msg = ref("");
 const loading = ref(false);
 const searched = ref(false);
 
+function getTodayISODate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function isFutureDate(value) {
+  if (!value) return false;
+  return String(value).slice(0, 10) > getTodayISODate();
+}
+
 /** Charger les mouvements du produit à la date donnée */
 async function reload() {
   msg.value = "";
   rows.value = [];
   draft.value = {};
+  todayIso.value = getTodayISODate();
 
   if (!codeProd.value || !day.value) return;
+  if (isFutureDate(day.value)) {
+    msg.value = "Erreur: la date de mouvement ne peut pas etre posterieure a la date du jour.";
+    return;
+  }
 
   loading.value = true;
   try {
@@ -198,10 +215,17 @@ const dirtyCount = computed(() => buildPatches().length);
 /** Enregistrer (PUT en lot) */
 async function save() {
   msg.value = "";
+  todayIso.value = getTodayISODate();
   const patches = buildPatches();
 
   if (patches.length === 0) {
     msg.value = "Aucune modification.";
+    return;
+  }
+
+  const hasFutureDate = patches.some((patch) => isFutureDate(patch.date_mvt));
+  if (hasFutureDate) {
+    msg.value = "Erreur: la date de mouvement ne peut pas etre posterieure a la date du jour.";
     return;
   }
 
@@ -224,6 +248,10 @@ async function save() {
 
 /** Optionnel : auto-reload si tu veux (sinon tu relies au bouton Rechercher) */
 // onMounted(() => {}); // je laisse vide volontairement
+
+onMounted(() => {
+  todayIso.value = getTodayISODate();
+});
 </script>
 
 
