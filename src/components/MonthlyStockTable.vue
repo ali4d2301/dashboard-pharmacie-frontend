@@ -202,6 +202,19 @@
                   @dblclick.stop="resetColumnWidth('cmm')"
                 ></button>
               </th>
+              <th :class="sortHeaderClass('msd', 'num')" @click="setSort('msd')">
+                MSD
+                <span class="sort-indicator">{{ sortIndicator("msd") }}</span>
+                <button
+                  type="button"
+                  class="col-resize-handle"
+                  tabindex="-1"
+                  aria-label="Ajuster la largeur de la colonne MSD"
+                  @pointerdown="startColumnResize('msd', $event)"
+                  @click.stop
+                  @dblclick.stop="resetColumnWidth('msd')"
+                ></button>
+              </th>
               <th :class="sortHeaderClass('etat_stock', 'th-status')" @click="setSort('etat_stock')">
                 <span>État de<br />stock</span>
                 <span class="sort-indicator">{{ sortIndicator("etat_stock") }}</span>
@@ -274,7 +287,8 @@
               <td class="num">{{ fmtInt(r.quantite_entree) }}</td>
               <td class="num">{{ fmtInt(r.quantite_sortie) }}</td>
               <td class="num strong">{{ fmtInt(r.sdu) }}</td>
-              <td class="num strong">{{ fmtCmm(r.cmm) }}</td>
+              <td class="num strong cell-cmm">{{ fmtCmm(r.cmm) }}</td>
+              <td class="num strong cell-msd">{{ fmtMsd(r.msd) }}</td>
 
               <td class="cell-status">
                 <span class="badge" :class="badgeClass(r.etat_stock)">
@@ -296,7 +310,7 @@
             </tr>
 
             <tr v-if="!loading && rows.length === 0">
-              <td colspan="12" class="empty">Aucune donnée.</td>
+              <td colspan="13" class="empty">Aucune donnée.</td>
             </tr>
           </tbody>
         </table>
@@ -347,6 +361,7 @@ const DEFAULT_COLUMNS = [
   { key: "quantite_sortie", width: 128, minWidth: 100 },
   { key: "sdu", width: 96, minWidth: 74 },
   { key: "cmm", width: 96, minWidth: 74 },
+  { key: "msd", width: 92, minWidth: 72 },
   { key: "etat_stock", width: 104, minWidth: 78 },
   { key: "prochaine_peremption", width: 120, minWidth: 84 },
   { key: "quantite_prochaine_peremption", width: 96, minWidth: 78 },
@@ -396,6 +411,15 @@ function fmtCmm(v) {
   if (Number.isNaN(n)) return "-";
   const up1 = Math.ceil(n * 10) / 10;
   return up1.toFixed(1).replace(".", ",");
+}
+
+function fmtMsd(v) {
+  const n = Number(v);
+  if (Number.isNaN(n)) return "-";
+  return n.toLocaleString("fr-FR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 function fmtDateISOToFR(iso) {

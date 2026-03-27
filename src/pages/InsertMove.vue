@@ -55,17 +55,16 @@
           </div>
 
           <div class="field">
-            <label>Code du produit</label>
+            <label>Nom du produit</label>
             <SingleSelectFilter
               class="code-select"
-              label="Code"
-              :model-value="form.code_prod"
-              :options="productCodeOptions"
+              :model-value="selectedProductName"
+              :options="productNameOptions"
               :placeholder="productInputPlaceholder"
               :disabled="!canLoadProduct || loadingProductOptions"
-              @update:model-value="setSelectedCode"
+              @update:model-value="setSelectedProduct"
             />
-            <small v-if="loadingProductOptions" class="mini">Chargement des codes...</small>
+            <small v-if="loadingProductOptions" class="mini">Chargement des produits...</small>
             <small v-else-if="loadingProd" class="mini">Chargement...</small>
             <small v-else-if="codeError" class="mini err">{{ codeError }}</small>
           </div>
@@ -73,8 +72,8 @@
 
         <div class="row">
           <div class="field">
-            <label>Nom du produit</label>
-            <input :value="prod.produit || ''" disabled />
+            <label>Code du produit</label>
+            <input :value="prod.code || form.code_prod || ''" disabled />
           </div>
 
           <div class="field">
@@ -399,14 +398,23 @@ const movementPlaceholder = computed(() =>
 const quantityLabel = computed(() => (isEntry.value ? "Quantit\u00e9 \u00e0 ajouter" : "Quantit\u00e9 \u00e0 sortir"));
 const submitLabel = computed(() => (isEntry.value ? "Enregistrer l'entr\u00e9e" : "Enregistrer la sortie"));
 const productInputPlaceholder = computed(() =>
-  canLoadProduct.value ? "Choisir un code" : "Renseignez d'abord la date du mouvement"
+  canLoadProduct.value ? "Choisir un produit" : "Renseignez d'abord la date du mouvement"
 );
-const productCodeOptions = computed(() =>
+const productNameOptions = computed(() =>
   productCodeEntries.value
-    .map((item) => String(item.code ?? "").trim())
+    .map((item) => String(item.produit ?? "").trim())
     .filter(Boolean)
     .sort((left, right) => left.localeCompare(right, "fr", { sensitivity: "base" }))
 );
+const selectedProductName = computed(() => {
+  if (!form.code_prod) return "";
+
+  const entry = productCodeEntries.value.find(
+    (item) => String(item.code ?? "").trim() === String(form.code_prod).trim()
+  );
+
+  return entry ? String(entry.produit ?? "").trim() : "";
+});
 
 function getTodayISODate() {
   return new Date().toISOString().slice(0, 10);
@@ -613,7 +621,7 @@ function normalizeErrorText(value) {
 function fieldLabelFromLoc(loc = []) {
   const field = Array.isArray(loc) ? loc[loc.length - 1] : "";
   if (field === "date_mvt") return "Date du mouvement";
-  if (field === "code_prod") return "Code du produit";
+  if (field === "code_prod") return "Nom du produit";
   if (field === "type_mvt") return "Type de mouvement";
   if (field === "mouvement") return "Mouvement";
   if (field === "quantite") return "Quantite";
@@ -736,8 +744,19 @@ function clearProd() {
   form.date_peremption = "";
 }
 
-function setSelectedCode(value) {
-  form.code_prod = String(value || "").trim();
+function setSelectedProduct(value) {
+  const selectedName = String(value || "").trim();
+
+  if (!selectedName) {
+    form.code_prod = "";
+    return;
+  }
+
+  const entry = productCodeEntries.value.find(
+    (item) => String(item.produit ?? "").trim() === selectedName
+  );
+
+  form.code_prod = entry ? String(entry.code ?? "").trim() : "";
 }
 
 function resetAfterSave() {
@@ -758,7 +777,7 @@ async function loadProductOptions() {
   } catch (e) {
     productCodeEntries.value = [];
     msgType.value = "err";
-    msg.value = extractApiErrorMessage(e, "Impossible de charger la liste des codes produits.");
+    msg.value = extractApiErrorMessage(e, "Impossible de charger la liste des produits actifs.");
   } finally {
     loadingProductOptions.value = false;
   }
