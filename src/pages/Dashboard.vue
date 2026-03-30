@@ -8,7 +8,9 @@
   >
     <div class="dashboard-header">
       <div class="header-top">
-        <a class="back" href="/" @click.prevent="handleBack">&larr; Retour</a>
+        <div class="header-left">
+          <a class="back" href="/" @click.prevent="handleBack">&larr; Retour</a>
+        </div>
 
         <div class="tabs">
           <button class="tab" :class="{ active: activeTab === 'synthese' }" @click="activeTab = 'synthese'">
@@ -21,6 +23,8 @@
             Historiques des mouvements
           </button>
         </div>
+
+        <span class="header-user-badge" :title="headerUsername">{{ headerUsername }}</span>
       </div>
 
       <div class="header-bar">
@@ -246,6 +250,7 @@ import EtatStockDonut from "../components/EtatStockDonut.vue";
 import MovementTypeBarChart from "../components/MovementTypeBarChart.vue";
 import MonthlyStockTable from "../components/MonthlyStockTable.vue";
 import {
+  AUTH_CHANGED_EVENT,
   clearStoredAuth,
   getStoredRole,
   notifyAuthChanged,
@@ -280,6 +285,11 @@ const movementChartShell = ref(null);
 const fullscreenChartKey = ref(null);
 const savedPageScrollY = ref(0);
 const savedPageScrollX = ref(0);
+const headerUsername = ref("Utilisateur");
+
+function syncHeaderUsername() {
+  headerUsername.value = String(window.localStorage.getItem("pharmacie_username") || "").trim() || "Utilisateur";
+}
 
 function toISODate(date) {
   const year = date.getFullYear();
@@ -440,11 +450,14 @@ watch(activeTab, async (tab) => {
 });
 
 onMounted(() => {
+  syncHeaderUsername();
+  window.addEventListener(AUTH_CHANGED_EVENT, syncHeaderUsername);
   document.addEventListener("fullscreenchange", syncFullscreenChart);
   syncFullscreenChart();
 });
 
 onBeforeUnmount(() => {
+  window.removeEventListener(AUTH_CHANGED_EVENT, syncHeaderUsername);
   document.removeEventListener("fullscreenchange", syncFullscreenChart);
 });
 

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Pharmacie">
+  <defs>
+    <linearGradient id="pharma-bg" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fb923c" />
+      <stop offset="1" stop-color="#22c55e" />
+    </linearGradient>
+    <linearGradient id="pharma-glow" x1="14" y1="10" x2="50" y2="54" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.34" />
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0" />
+    </linearGradient>
+  </defs>
+
+  <rect x="4" y="4" width="56" height="56" rx="18" fill="url(#pharma-bg)" />
+  <rect x="4.75" y="4.75" width="54.5" height="54.5" rx="17.25" fill="none" stroke="rgba(15,23,42,0.12)" />
+  <path
+    d="M28 17c0-1.657 1.343-3 3-3h2c1.657 0 3 1.343 3 3v11h11c1.657 0 3 1.343 3 3v2c0 1.657-1.343 3-3 3H36v11c0 1.657-1.343 3-3 3h-2c-1.657 0-3-1.343-3-3V36H17c-1.657 0-3-1.343-3-3v-2c0-1.657 1.343-3 3-3h11V17Z"
+    fill="#fffdf8"
+  />
+  <circle cx="22" cy="18" r="13" fill="url(#pharma-glow)" />
+</svg>
