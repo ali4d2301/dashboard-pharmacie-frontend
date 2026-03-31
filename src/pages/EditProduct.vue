@@ -108,10 +108,10 @@
               <select v-model="draft[product.code].classe" class="cell cell--select">
                 <option
                   v-for="option in classeOptions"
-                  :key="`classe-${option}`"
-                  :value="option"
+                  :key="`classe-${option.value}`"
+                  :value="option.value"
                 >
-                  {{ option }}
+                  {{ option.label }}
                 </option>
               </select>
             </td>
@@ -119,10 +119,10 @@
               <select v-model="draft[product.code].cible" class="cell cell--select">
                 <option
                   v-for="option in cibleOptions"
-                  :key="`cible-${option}`"
-                  :value="option"
+                  :key="`cible-${option.value}`"
+                  :value="option.value"
                 >
-                  {{ option }}
+                  {{ option.label }}
                 </option>
               </select>
             </td>
@@ -177,6 +177,10 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useRouter } from "vue-router";
 
 import MultiSelectChips from "@/components/MultiSelectChips.vue";
+import {
+  PRIORITY_TARGET_OPTIONS as cibleOptions,
+  THERAPEUTIC_CLASS_OPTIONS as classeOptions,
+} from "@/constants/productOptions";
 import api from "@/services/api";
 import { getDefaultRouteForRole } from "@/utils/auth";
 
@@ -250,23 +254,6 @@ const codeOptions = computed(() =>
   [...new Set(products.value.map((product) => String(product.code ?? "").trim()).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, "fr", { sensitivity: "base" }))
 );
-
-function buildSelectOptions(fieldName) {
-  const values = new Set(["Autres"]);
-
-  for (const product of products.value) {
-    values.add(normalizeChoice(product[fieldName]));
-  }
-
-  return [...values].sort((left, right) => {
-    if (left === "Autres") return -1;
-    if (right === "Autres") return 1;
-    return left.localeCompare(right, "fr", { sensitivity: "base" });
-  });
-}
-
-const classeOptions = computed(() => buildSelectOptions("classe"));
-const cibleOptions = computed(() => buildSelectOptions("cible"));
 
 const filteredProducts = computed(() => {
   const codeSet = new Set(selectedCodes.value);

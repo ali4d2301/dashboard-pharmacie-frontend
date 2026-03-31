@@ -202,6 +202,10 @@
 import { nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 
+import {
+  PRIORITY_TARGET_OPTIONS as priorityTargetOptions,
+  THERAPEUTIC_CLASS_OPTIONS as therapeuticClassOptions,
+} from "@/constants/productOptions";
 import api from "@/services/api";
 import { getDefaultRouteForRole } from "@/utils/auth";
 
@@ -216,35 +220,6 @@ function getTodayDate() {
   const offsetMs = today.getTimezoneOffset() * 60000;
   return new Date(today.getTime() - offsetMs).toISOString().slice(0, 10);
 }
-
-const therapeuticClassOptions = [
-  { value: "Antalgique", label: "Antalgique" },
-  { value: "Antibiotique", label: "Antibiotique" },
-  { value: "Antipaludique", label: "Antipaludique" },
-  { value: "Anti-inflammatoire", label: "Anti-inflammatoire" },
-  { value: "Antihypertenseur", label: "Antihypertenseur" },
-  { value: "Antidiabetique", label: "Antidiab\u00e9tique" },
-  { value: "Antihistaminique", label: "Antihistaminique" },
-  { value: "Antifongique", label: "Antifongique" },
-  { value: "Vitamines et complements", label: "Vitamines et compl\u00e9ments" },
-  { value: "Autres", label: "Autres" },
-];
-
-const priorityTargetOptions = [
-  { value: "Appareil digestif", label: "Appareil digestif" },
-  { value: "Systeme nerveux", label: "Syst\u00e8me nerveux" },
-  { value: "Systeme respiratoire", label: "Syst\u00e8me respiratoire" },
-  { value: "Systeme cardiovasculaire", label: "Syst\u00e8me cardiovasculaire" },
-  { value: "Systeme endocrinien", label: "Syst\u00e8me endocrinien" },
-  {
-    value: "Systeme musculo-squelettique",
-    label: "Syst\u00e8me musculo-squelettique",
-  },
-  { value: "Peau et muqueuses", label: "Peau et muqueuses" },
-  { value: "Sante de la femme", label: "Sant\u00e9 de la femme" },
-  { value: "Pediatrie", label: "P\u00e9diatrie" },
-  { value: "Autres", label: "Autres" },
-];
 
 const form = reactive({
   code: "",
